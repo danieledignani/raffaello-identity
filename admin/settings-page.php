@@ -323,6 +323,27 @@ function ri_locked_notice(string $option_key, array $ri_constants): void {
             </table>
         </div>
 
+        <!-- Debug -->
+        <div class="ri-section">
+            <h2>Debug</h2>
+            <table class="form-table">
+                <tr>
+                    <th>Modalità debug</th>
+                    <td>
+                        <label>
+                            <input type="checkbox" name="ri_debug_mode" value="1"
+                                <?php checked($opts['debug_mode'] ?? false); ?>>
+                            Salva la risposta userinfo completa ad ogni login
+                        </label>
+                        <p class="description">
+                            Quando attivo, i dati completi della userinfo vengono salvati nei meta utente
+                            e sono consultabili nella tab <strong>Debug</strong>. Disattivare in produzione.
+                        </p>
+                    </td>
+                </tr>
+            </table>
+        </div>
+
         <?php submit_button('Salva impostazioni'); ?>
     </form>
 
@@ -371,27 +392,6 @@ function ri_locked_notice(string $option_key, array $ri_constants): void {
         </table>
     </div>
 
-    <!-- Debug -->
-    <div class="ri-section">
-        <h2>Debug</h2>
-        <table class="form-table">
-            <tr>
-                <th>Modalità debug</th>
-                <td>
-                    <label>
-                        <input type="checkbox" name="ri_debug_mode" value="1"
-                            <?php checked($opts['debug_mode'] ?? false); ?>>
-                        Salva la risposta userinfo completa ad ogni login
-                    </label>
-                    <p class="description">
-                        Quando attivo, i dati completi della userinfo vengono salvati nei meta utente
-                        e sono consultabili nella tab <strong>Debug</strong>. Disattivare in produzione.
-                    </p>
-                </td>
-            </tr>
-        </table>
-    </div>
-
     <!-- Plugin consigliati -->
     <div class="ri-section">
         <h2>Plugin consigliati</h2>
@@ -409,7 +409,7 @@ function ri_locked_notice(string $option_key, array $ri_constants): void {
                             <span style="color:#00a32a;">&#10003; Attivo</span>
                         <?php else : ?>
                             <span style="color:#d63638;">Non installato</span>
-                            — <a href="<?php echo esc_url(admin_url('plugin-install.php?s=Advanced+Custom+Fields&tab=search&type=term')); ?>">Installa</a>
+                            — <a href="<?php echo esc_url(admin_url('plugin-install.php?tab=plugin-information&plugin=advanced-custom-fields&TB_iframe=true&width=600&height=550')); ?>" class="thickbox open-plugin-details-modal">Installa</a>
                         <?php endif; ?>
                     </td>
                 </tr>
@@ -421,7 +421,7 @@ function ri_locked_notice(string $option_key, array $ri_constants): void {
                             <span style="color:#00a32a;">&#10003; Attivo</span>
                         <?php else : ?>
                             <span style="color:#999;">Non installato</span>
-                            — <a href="<?php echo esc_url(admin_url('plugin-install.php?s=Members+Justin+Tadlock&tab=search&type=term')); ?>">Installa</a>
+                            — <a href="<?php echo esc_url(admin_url('plugin-install.php?tab=plugin-information&plugin=members&TB_iframe=true&width=600&height=550')); ?>" class="thickbox open-plugin-details-modal">Installa</a>
                         <?php endif; ?>
                     </td>
                 </tr>
