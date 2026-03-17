@@ -4,9 +4,7 @@ if (!defined('ABSPATH')) {
 }
 /** @var \RaffaelloIdentity\Settings $settings */
 ?>
-<div class="wrap ri-admin-wrap">
-    <h1>Raffaello Identity — Test Connessione</h1>
-    <p class="description">
+<p class="description">
         Verifica la configurazione OIDC e la connettività con il server Identity.<br>
         I test vengono eseguiti in sequenza per diagnosticare eventuali problemi.
     </p>
@@ -63,7 +61,6 @@ if (!defined('ABSPATH')) {
     </div>
 
     <div id="ri-test-summary" style="display:none;margin-top:24px;padding:16px;border-radius:4px;font-size:14px;"></div>
-</div>
 
 <style>
 .ri-test-step {

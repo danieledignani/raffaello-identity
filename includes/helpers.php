@@ -30,13 +30,14 @@ function ri_get_options(): array {
             'cognome'   => 'last_name',
             'email'     => 'user_email',
         ],
-        'extra_claims'      => 'consensoMarketing,consensoProfilazione,joomla_sub',
+        'extra_claims'      => 'profilo,consensoMarketing,consensoProfilazione,consensoTerzeParti,joomla_sub',
         'auto_register'     => true,
         'profile_page_id'   => 0,
         'login_button_text' => 'Accedi con Raffaello',
         'override_wp_login' => false,
         'wc_override_login' => true,
         'nav_menu_location' => '',
+        'debug_mode'        => false,
     ];
 
     $saved = get_option('ri_options', []);
@@ -59,6 +60,7 @@ function ri_get_options(): array {
         'RI_OVERRIDE_WP_LOGIN' => 'override_wp_login',
         'RI_WC_OVERRIDE_LOGIN' => 'wc_override_login',
         'RI_EXTRA_CLAIMS'      => 'extra_claims',
+        'RI_DEBUG_MODE'        => 'debug_mode',
     ];
 
     foreach ($constant_map as $const => $key) {

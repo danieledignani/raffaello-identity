@@ -7,7 +7,7 @@ if (!defined('ABSPATH')) {
 }
 
 /**
- * Pagina di amministrazione del plugin.
+ * Pagina di amministrazione del plugin — unica pagina con tab.
  */
 class Admin {
     private Settings $settings;
@@ -31,40 +31,78 @@ class Admin {
             'raffaello-identity',
             [$this, 'renderPage']
         );
-        add_management_page(
-            'Raffaello Identity — Log',
-            'RI Log',
-            'manage_options',
-            'raffaello-identity-logs',
-            [$this, 'renderLogPage']
-        );
-        add_management_page(
-            'Raffaello Identity — Test Connessione',
-            'RI Test',
-            'manage_options',
-            'raffaello-identity-test',
-            [$this, 'renderTestPage']
-        );
     }
 
     public function enqueueAssets(string $hook): void {
-        $admin_pages = [
-            'settings_page_raffaello-identity',
-            'tools_page_raffaello-identity-logs',
-            'tools_page_raffaello-identity-test',
-        ];
-        if (!in_array($hook, $admin_pages, true)) {
+        if ($hook !== 'settings_page_raffaello-identity') {
             return;
         }
         wp_enqueue_style('ri-admin', RI_PLUGIN_URL . 'assets/css/admin.css', [], RI_VERSION);
+        wp_enqueue_script('ri-test', RI_PLUGIN_URL . 'assets/js/admin-test.js', [], RI_VERSION, true);
+        wp_localize_script('ri-test', 'riTest', [
+            'ajaxUrl' => admin_url('admin-ajax.php'),
+            'nonce'   => wp_create_nonce('ri_test_connection'),
+        ]);
+    }
 
-        if ($hook === 'tools_page_raffaello-identity-test') {
-            wp_enqueue_script('ri-test', RI_PLUGIN_URL . 'assets/js/admin-test.js', [], RI_VERSION, true);
-            wp_localize_script('ri-test', 'riTest', [
-                'ajaxUrl' => admin_url('admin-ajax.php'),
-                'nonce'   => wp_create_nonce('ri_test_connection'),
-            ]);
+    /**
+     * Pagina principale con tab: Impostazioni, Test Connessione, Log, Debug.
+     */
+    public function renderPage(): void {
+        if (!current_user_can('manage_options')) {
+            return;
         }
+
+        $current_tab = sanitize_text_field($_GET['tab'] ?? 'settings');
+        $tabs = [
+            'settings' => 'Impostazioni',
+            'test'     => 'Test Connessione',
+            'log'      => 'Log',
+            'debug'    => 'Debug',
+        ];
+
+        echo '<div class="wrap ri-admin-wrap">';
+        echo '<h1>Raffaello Identity</h1>';
+
+        // Tab navigation
+        echo '<nav class="nav-tab-wrapper">';
+        foreach ($tabs as $slug => $label) {
+            $url = add_query_arg(['page' => 'raffaello-identity', 'tab' => $slug], admin_url('options-general.php'));
+            $active = ($slug === $current_tab) ? ' nav-tab-active' : '';
+            printf('<a href="%s" class="nav-tab%s">%s</a>', esc_url($url), $active, esc_html($label));
+        }
+        echo '</nav>';
+
+        echo '<div class="ri-tab-content" style="margin-top:16px;">';
+
+        switch ($current_tab) {
+            case 'test':
+                $this->renderTestTab();
+                break;
+            case 'log':
+                $this->renderLogTab();
+                break;
+            case 'debug':
+                $this->renderDebugTab();
+                break;
+            default:
+                $this->renderSettingsTab();
+                break;
+        }
+
+        echo '</div></div>';
+    }
+
+    // =========================================================================
+    // Tab: Impostazioni
+    // =========================================================================
+
+    private function renderSettingsTab(): void {
+        $opts = $this->settings->getAll();
+        $identity_roles = RoleMapper::getAvailableIdentityRoles();
+        $wp_roles = RoleMapper::getAvailableWpRoles();
+
+        include RI_PLUGIN_DIR . 'admin/settings-page.php';
     }
 
     public function handleSave(): void {
@@ -99,6 +137,9 @@ class Admin {
 
         // Menu navigazione
         $options['nav_menu_location'] = sanitize_text_field($_POST['ri_nav_menu_location'] ?? '');
+
+        // Debug mode
+        $options['debug_mode'] = isset($_POST['ri_debug_mode']);
 
         // Mappatura ruoli
         $role_mapping = [];
@@ -135,47 +176,11 @@ class Admin {
         add_settings_error('ri_settings', 'saved', 'Impostazioni salvate.', 'success');
     }
 
-    public function renderLogPage(): void {
-        if (!current_user_can('manage_options')) {
-            return;
-        }
+    // =========================================================================
+    // Tab: Test Connessione
+    // =========================================================================
 
-        // Gestione azioni
-        if (isset($_POST['ri_clear_logs']) && wp_verify_nonce($_POST['ri_log_nonce'] ?? '', 'ri_clear_logs')) {
-            Logger::clearLogs();
-            echo '<div class="notice notice-success"><p>Log svuotati.</p></div>';
-        }
-
-        $level_filter = sanitize_text_field($_GET['level'] ?? '');
-        $event_filter = sanitize_text_field($_GET['event'] ?? '');
-        $page_num = max(1, (int) ($_GET['paged'] ?? 1));
-        $per_page = 50;
-        $offset = ($page_num - 1) * $per_page;
-
-        $logs = Logger::getLogs($per_page, $offset, $level_filter, $event_filter);
-        $total = Logger::countLogs($level_filter, $event_filter);
-        $total_pages = ceil($total / $per_page);
-
-        include RI_PLUGIN_DIR . 'admin/logs-page.php';
-    }
-
-    public function renderPage(): void {
-        if (!current_user_can('manage_options')) {
-            return;
-        }
-
-        $opts = $this->settings->getAll();
-        $identity_roles = RoleMapper::getAvailableIdentityRoles();
-        $wp_roles = RoleMapper::getAvailableWpRoles();
-
-        include RI_PLUGIN_DIR . 'admin/settings-page.php';
-    }
-
-    public function renderTestPage(): void {
-        if (!current_user_can('manage_options')) {
-            return;
-        }
-
+    private function renderTestTab(): void {
         $settings = $this->settings;
         include RI_PLUGIN_DIR . 'admin/test-page.php';
     }
@@ -213,9 +218,120 @@ class Admin {
         wp_send_json($result);
     }
 
-    /**
-     * Test 1: Verifica che il server Identity risponda e abbia gli endpoint OIDC.
-     */
+    // =========================================================================
+    // Tab: Log
+    // =========================================================================
+
+    private function renderLogTab(): void {
+        // Gestione azioni
+        if (isset($_POST['ri_clear_logs']) && wp_verify_nonce($_POST['ri_log_nonce'] ?? '', 'ri_clear_logs')) {
+            Logger::clearLogs();
+            echo '<div class="notice notice-success"><p>Log svuotati.</p></div>';
+        }
+
+        $level_filter = sanitize_text_field($_GET['level'] ?? '');
+        $event_filter = sanitize_text_field($_GET['event'] ?? '');
+        $page_num = max(1, (int) ($_GET['paged'] ?? 1));
+        $per_page = 50;
+        $offset = ($page_num - 1) * $per_page;
+
+        $logs = Logger::getLogs($per_page, $offset, $level_filter, $event_filter);
+        $total = Logger::countLogs($level_filter, $event_filter);
+        $total_pages = ceil($total / $per_page);
+
+        include RI_PLUGIN_DIR . 'admin/logs-page.php';
+    }
+
+    // =========================================================================
+    // Tab: Debug
+    // =========================================================================
+
+    private function renderDebugTab(): void {
+        $debug_enabled = $this->settings->get('debug_mode', false);
+
+        echo '<h2>Modalità Debug</h2>';
+        echo '<p class="description">Quando attiva, il plugin salva la risposta completa della userinfo ad ogni login. I dati sono consultabili qui sotto per ogni utente OIDC.</p>';
+
+        // Stato attuale
+        if ($debug_enabled) {
+            echo '<div class="notice notice-warning inline" style="margin:12px 0;"><p><strong>Debug attivo</strong> — tutti i dati userinfo vengono salvati ad ogni login. Disattivare in produzione.</p></div>';
+        } else {
+            echo '<div class="notice notice-info inline" style="margin:12px 0;"><p>Debug non attivo. Attivalo nella tab Impostazioni per registrare i dati userinfo completi.</p></div>';
+        }
+
+        // Mostra dati debug degli utenti OIDC
+        $oidc_users = get_users([
+            'meta_key'   => 'ri_oidc_sub',
+            'meta_query' => [['key' => 'ri_oidc_sub', 'compare' => 'EXISTS']],
+            'number'     => 50,
+            'orderby'    => 'ID',
+            'order'      => 'DESC',
+        ]);
+
+        if (empty($oidc_users)) {
+            echo '<p>Nessun utente OIDC trovato.</p>';
+            return;
+        }
+
+        echo '<h3>Utenti OIDC registrati (' . count($oidc_users) . ')</h3>';
+        echo '<table class="widefat striped" style="max-width:100%;">';
+        echo '<thead><tr><th>ID</th><th>Email</th><th>Subject ID</th><th>Ruoli WP</th><th>Ultimo login OIDC</th><th>Dati</th></tr></thead><tbody>';
+
+        foreach ($oidc_users as $user) {
+            $sub = get_user_meta($user->ID, 'ri_oidc_sub', true);
+            $userinfo = get_user_meta($user->ID, 'ri_oidc_userinfo', true);
+            $debug_data = get_user_meta($user->ID, 'ri_debug_userinfo', true);
+            $roles = implode(', ', $user->roles);
+
+            // Mostra i dati debug se disponibili, altrimenti la userinfo standard
+            $data_to_show = !empty($debug_data) ? $debug_data : $userinfo;
+            $data_source = !empty($debug_data) ? 'debug' : 'standard';
+
+            echo '<tr>';
+            echo '<td>' . esc_html($user->ID) . '</td>';
+            echo '<td>' . esc_html($user->user_email) . '</td>';
+            echo '<td><code style="font-size:11px;">' . esc_html($sub) . '</code></td>';
+            echo '<td>' . esc_html($roles) . '</td>';
+            echo '<td>' . esc_html($user->user_registered) . '</td>';
+            echo '<td>';
+            if (!empty($data_to_show)) {
+                $badge = $data_source === 'debug'
+                    ? '<span style="background:#f0c33c;padding:2px 6px;border-radius:3px;font-size:11px;">DEBUG</span> '
+                    : '';
+                echo '<details><summary>' . $badge . 'Mostra userinfo</summary>';
+                echo '<pre style="max-height:300px;overflow:auto;font-size:11px;background:#f5f5f5;padding:8px;margin-top:4px;">';
+                echo esc_html(wp_json_encode($data_to_show, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+                echo '</pre></details>';
+            } else {
+                echo '<em style="color:#999;">Nessun dato</em>';
+            }
+            echo '</td>';
+            echo '</tr>';
+        }
+
+        echo '</tbody></table>';
+
+        // Azione: pulisci dati debug
+        if (!empty($oidc_users)) {
+            echo '<form method="post" style="margin-top:12px;">';
+            wp_nonce_field('ri_clear_debug', 'ri_debug_nonce');
+            echo '<button type="submit" name="ri_clear_debug" class="button" onclick="return confirm(\'Eliminare tutti i dati debug userinfo?\');">Pulisci dati debug</button>';
+            echo '</form>';
+
+            // Handle clear
+            if (isset($_POST['ri_clear_debug']) && wp_verify_nonce($_POST['ri_debug_nonce'] ?? '', 'ri_clear_debug')) {
+                foreach ($oidc_users as $user) {
+                    delete_user_meta($user->ID, 'ri_debug_userinfo');
+                }
+                echo '<div class="notice notice-success"><p>Dati debug eliminati.</p></div>';
+            }
+        }
+    }
+
+    // =========================================================================
+    // Test methods (usati dal tab Test e dall'AJAX handler)
+    // =========================================================================
+
     private function testDiscovery(): array {
         $issuer = $this->settings->getIssuer();
         $discovery_url = $issuer . '/.well-known/openid-configuration';
@@ -248,7 +364,6 @@ class Admin {
             ];
         }
 
-        // Verifica endpoint attesi
         $expected = ['authorization_endpoint', 'token_endpoint', 'userinfo_endpoint'];
         $missing = [];
         foreach ($expected as $key) {
@@ -264,7 +379,6 @@ class Admin {
             'end_session_endpoint'   => $body['end_session_endpoint'] ?? '—',
         ];
 
-        // Verifica che i nostri endpoint configurati coincidano
         $mismatches = [];
         if (!empty($body['authorization_endpoint']) && $body['authorization_endpoint'] !== $this->settings->getAuthorizationEndpoint()) {
             $mismatches['authorization'] = [
@@ -279,12 +393,10 @@ class Admin {
             ];
         }
 
-        // Scopes supportati
         $supported_scopes = $body['scopes_supported'] ?? [];
         $our_scopes = explode(' ', $this->settings->getScopes());
         $unsupported = array_diff($our_scopes, $supported_scopes);
 
-        // Grant types
         $grant_types = $body['grant_types_supported'] ?? [];
 
         return [
@@ -304,9 +416,6 @@ class Admin {
         ];
     }
 
-    /**
-     * Test 2: Verifica che il token endpoint sia raggiungibile (con client_credentials se supportato).
-     */
     private function testTokenEndpoint(): array {
         $start = microtime(true);
 
@@ -337,7 +446,6 @@ class Admin {
         $status = wp_remote_retrieve_response_code($response);
         $body = json_decode(wp_remote_retrieve_body($response), true);
 
-        // client_credentials potrebbe non essere supportato: va bene, ci interessa che risponda
         $client_valid = true;
         $fix = '';
 
@@ -346,7 +454,6 @@ class Admin {
                 $client_valid = false;
                 $fix = 'Client ID o Client Secret non validi. Verifica le credenziali nelle impostazioni.';
             } elseif ($body['error'] === 'unsupported_grant_type') {
-                // OK: il server non supporta client_credentials ma ha risposto — il client è valido
                 $client_valid = true;
             }
         } elseif ($status === 401) {
@@ -369,13 +476,9 @@ class Admin {
         ];
     }
 
-    /**
-     * Test 3: Verifica che l'endpoint userinfo sia raggiungibile.
-     */
     private function testUserInfoEndpoint(): array {
         $start = microtime(true);
 
-        // Senza un token valido, ci aspettiamo 401 — ma dimostra che l'endpoint esiste
         $response = wp_remote_get($this->settings->getUserInfoEndpoint(), [
             'headers' => ['Authorization' => 'Bearer test-invalid-token'],
             'timeout' => 10,
@@ -394,11 +497,8 @@ class Admin {
         }
 
         $status = wp_remote_retrieve_response_code($response);
-
-        // 401 è il risultato atteso (token non valido) — significa che l'endpoint esiste
         $reachable = in_array($status, [200, 401, 403], true);
 
-        // Se l'utente corrente ha un access token salvato, proviamo con quello
         $user_id = get_current_user_id();
         $access_token = get_user_meta($user_id, 'ri_access_token', true);
         $userinfo_data = null;
@@ -425,13 +525,9 @@ class Admin {
         ];
     }
 
-    /**
-     * Test 4: Verifica la configurazione completa (riepilogo).
-     */
     private function testFullFlow(): array {
         $checks = [];
 
-        // Check configurazione
         $checks['issuer'] = [
             'label'  => 'Issuer URL',
             'value'  => $this->settings->getIssuer(),
@@ -464,18 +560,15 @@ class Admin {
             'label'  => 'Callback URL',
             'value'  => $this->settings->getCallbackUrl(),
             'ok'     => true,
-            'fix'    => '',
         ];
 
-        // Verifica redirect URI registrata
         $checks['redirect_uri'] = [
             'label'  => 'Redirect URI registrata sul server',
             'value'  => $this->settings->getCallbackUrl(),
-            'ok'     => true, // Non possiamo verificarlo da qui, ma lo mostriamo
+            'ok'     => true,
             'note'   => 'Assicurati che questo URL sia registrato come redirect_uri nel client sul server Identity.',
         ];
 
-        // Conta utenti OIDC
         $oidc_users = get_users(['meta_key' => 'ri_oidc_sub', 'count_total' => true, 'number' => 0]);
         $checks['oidc_users'] = [
             'label'  => 'Utenti OIDC collegati',
@@ -483,7 +576,6 @@ class Admin {
             'ok'     => true,
         ];
 
-        // Ruoli custom registrati
         $custom_roles = ['studente', 'docente', 'docente_sostegno', 'dirigente'];
         $missing_roles = [];
         foreach ($custom_roles as $role) {
@@ -496,6 +588,12 @@ class Admin {
             'value'  => empty($missing_roles) ? 'Tutti registrati' : 'Mancanti: ' . implode(', ', $missing_roles),
             'ok'     => empty($missing_roles),
             'fix'    => 'Disattiva e riattiva il plugin per registrare i ruoli mancanti.',
+        ];
+
+        $checks['debug_mode'] = [
+            'label'  => 'Modalità debug',
+            'value'  => $this->settings->get('debug_mode', false) ? 'Attiva' : 'Disattiva',
+            'ok'     => true,
         ];
 
         $all_ok = true;

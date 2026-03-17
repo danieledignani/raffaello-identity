@@ -180,6 +180,24 @@ class OidcClient {
         // Salva i token per eventuali usi futuri (refresh, logout)
         $this->saveTokens($user_id, $tokens);
 
+        // Debug mode: salva la risposta userinfo completa (token, claim, timestamp)
+        if ($this->settings->get('debug_mode', false)) {
+            update_user_meta($user_id, 'ri_debug_userinfo', [
+                'userinfo'   => $userinfo,
+                'tokens_meta'=> [
+                    'has_access_token'  => !empty($tokens['access_token']),
+                    'has_refresh_token' => !empty($tokens['refresh_token']),
+                    'has_id_token'      => !empty($tokens['id_token']),
+                    'token_type'        => $tokens['token_type'] ?? null,
+                    'expires_in'        => $tokens['expires_in'] ?? null,
+                    'scope'             => $tokens['scope'] ?? null,
+                ],
+                'timestamp'  => current_time('mysql'),
+                'ip'         => $_SERVER['REMOTE_ADDR'] ?? '',
+            ]);
+            Logger::debug('debug_userinfo_saved', "Dati debug salvati per utente #$user_id");
+        }
+
         /**
          * Filtro: consente di modificare l'URL di redirect post-login.
          *
@@ -415,6 +433,8 @@ class OidcClient {
                 $counter++;
             }
 
+            $default_role = get_role('customer') ? 'customer' : 'subscriber';
+
             $user_data = [
                 'user_login'   => $username,
                 'user_email'   => $email,
@@ -422,7 +442,7 @@ class OidcClient {
                 'first_name'   => $nome,
                 'last_name'    => $cognome,
                 'display_name' => trim("$nome $cognome") ?: $username,
-                'role'         => 'subscriber',
+                'role'         => $default_role,
             ];
 
             /**
@@ -513,10 +533,11 @@ class OidcClient {
             $assigned = true;
         }
 
-        // Se nessun ruolo mappato, mantieni subscriber
+        // Se nessun ruolo mappato, assegna "customer" (WooCommerce) se esiste, altrimenti "subscriber"
         if (!$assigned) {
-            $user->add_role('subscriber');
-            $assigned_roles[] = '(default) → subscriber';
+            $default_role = get_role('customer') ? 'customer' : 'subscriber';
+            $user->add_role($default_role);
+            $assigned_roles[] = "(default) → $default_role";
         }
 
         Logger::info('roles_mapped', "Ruoli mappati per utente #$user_id", [

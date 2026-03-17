@@ -40,10 +40,7 @@ function ri_locked_notice(string $option_key, array $ri_constants): void {
     }
 }
 ?>
-<div class="wrap ri-admin-wrap">
-    <h1>Raffaello Identity — Impostazioni</h1>
-
-    <?php settings_errors('ri_settings'); ?>
+<?php settings_errors('ri_settings'); ?>
 
     <form method="post" action="">
         <?php wp_nonce_field('ri_save_settings', 'ri_nonce'); ?>
@@ -374,21 +371,26 @@ function ri_locked_notice(string $option_key, array $ri_constants): void {
         </table>
     </div>
 
+    <!-- Debug -->
     <div class="ri-section">
-        <h2>Diagnostica</h2>
-        <p>
-            <a href="<?php echo esc_url(admin_url('tools.php?page=raffaello-identity-test')); ?>" class="button button-primary">
-                Test Connessione
-            </a>
-            <a href="<?php echo esc_url(admin_url('tools.php?page=raffaello-identity-logs')); ?>" class="button" style="margin-left:8px;">
-                Visualizza Log
-            </a>
-            <span class="description" style="margin-left:8px;">
-                Verifica la connettività con il server Identity e consulta i log OIDC.
-            </span>
-        </p>
+        <h2>Debug</h2>
+        <table class="form-table">
+            <tr>
+                <th>Modalità debug</th>
+                <td>
+                    <label>
+                        <input type="checkbox" name="ri_debug_mode" value="1"
+                            <?php checked($opts['debug_mode'] ?? false); ?>>
+                        Salva la risposta userinfo completa ad ogni login
+                    </label>
+                    <p class="description">
+                        Quando attivo, i dati completi della userinfo vengono salvati nei meta utente
+                        e sono consultabili nella tab <strong>Debug</strong>. Disattivare in produzione.
+                    </p>
+                </td>
+            </tr>
+        </table>
     </div>
-</div>
 
 <script>
 (function() {

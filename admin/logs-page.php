@@ -9,7 +9,7 @@ if (!defined('ABSPATH')) {
 /** @var string $level_filter */
 /** @var string $event_filter */
 
-$base_url = admin_url('tools.php?page=raffaello-identity-logs');
+$base_url = add_query_arg(['page' => 'raffaello-identity', 'tab' => 'log'], admin_url('options-general.php'));
 $levels = ['', 'DEBUG', 'INFO', 'WARNING', 'ERROR'];
 $level_colors = [
     'DEBUG'   => '#6c757d',
@@ -18,13 +18,13 @@ $level_colors = [
     'ERROR'   => '#dc3232',
 ];
 ?>
-<div class="wrap ri-admin-wrap">
-    <h1>Raffaello Identity — Log <span class="ri-log-count">(<?php echo number_format_i18n($total); ?> voci)</span></h1>
+<h2>Log <span class="ri-log-count" style="font-weight:normal;color:#666;">(<?php echo number_format_i18n($total); ?> voci)</span></h2>
 
     <!-- Filtri -->
     <div class="ri-section ri-log-filters">
         <form method="get" action="<?php echo esc_url($base_url); ?>">
-            <input type="hidden" name="page" value="raffaello-identity-logs">
+            <input type="hidden" name="page" value="raffaello-identity">
+            <input type="hidden" name="tab" value="log">
             <label for="ri-log-level">Livello:</label>
             <select name="level" id="ri-log-level">
                 <option value="">Tutti</option>
@@ -123,7 +123,6 @@ $level_colors = [
         </div>
         <?php endif; ?>
     <?php endif; ?>
-</div>
 
 <script>
 document.addEventListener('click', function(e) {
