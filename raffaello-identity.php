@@ -20,6 +20,16 @@ define('RI_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('RI_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('RI_PLUGIN_BASENAME', plugin_basename(__FILE__));
 
+// Aggiornamento automatico da GitHub
+require_once __DIR__ . '/plugin-update-checker/plugin-update-checker.php';
+use YahnisElsts\PluginUpdateChecker\v5\PucFactory;
+
+$riUpdateChecker = PucFactory::buildUpdateChecker(
+    'https://raw.githubusercontent.com/danieledignani/raffaello-identity/master/.github/update-metadata/raffaello-identity.json',
+    __FILE__,
+    'raffaello-identity'
+);
+
 // Autoload classi
 spl_autoload_register(function ($class) {
     $prefix = 'RaffaelloIdentity\\';

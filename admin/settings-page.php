@@ -377,11 +377,14 @@ function ri_locked_notice(string $option_key, array $ri_constants): void {
     <div class="ri-section">
         <h2>Diagnostica</h2>
         <p>
-            <a href="<?php echo esc_url(admin_url('tools.php?page=raffaello-identity-logs')); ?>" class="button">
+            <a href="<?php echo esc_url(admin_url('tools.php?page=raffaello-identity-test')); ?>" class="button button-primary">
+                Test Connessione
+            </a>
+            <a href="<?php echo esc_url(admin_url('tools.php?page=raffaello-identity-logs')); ?>" class="button" style="margin-left:8px;">
                 Visualizza Log
             </a>
             <span class="description" style="margin-left:8px;">
-                Consulta i log del flusso OIDC per diagnosticare eventuali problemi di autenticazione.
+                Verifica la connettività con il server Identity e consulta i log OIDC.
             </span>
         </p>
     </div>

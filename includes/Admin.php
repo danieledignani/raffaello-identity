@@ -20,6 +20,7 @@ class Admin {
         add_action('admin_menu', [$this, 'addMenuPage']);
         add_action('admin_init', [$this, 'handleSave']);
         add_action('admin_enqueue_scripts', [$this, 'enqueueAssets']);
+        add_action('wp_ajax_ri_test_connection', [$this, 'handleTestConnection']);
     }
 
     public function addMenuPage(): void {
@@ -37,13 +38,33 @@ class Admin {
             'raffaello-identity-logs',
             [$this, 'renderLogPage']
         );
+        add_management_page(
+            'Raffaello Identity — Test Connessione',
+            'RI Test',
+            'manage_options',
+            'raffaello-identity-test',
+            [$this, 'renderTestPage']
+        );
     }
 
     public function enqueueAssets(string $hook): void {
-        if (!in_array($hook, ['settings_page_raffaello-identity', 'tools_page_raffaello-identity-logs'], true)) {
+        $admin_pages = [
+            'settings_page_raffaello-identity',
+            'tools_page_raffaello-identity-logs',
+            'tools_page_raffaello-identity-test',
+        ];
+        if (!in_array($hook, $admin_pages, true)) {
             return;
         }
         wp_enqueue_style('ri-admin', RI_PLUGIN_URL . 'assets/css/admin.css', [], RI_VERSION);
+
+        if ($hook === 'tools_page_raffaello-identity-test') {
+            wp_enqueue_script('ri-test', RI_PLUGIN_URL . 'assets/js/admin-test.js', [], RI_VERSION, true);
+            wp_localize_script('ri-test', 'riTest', [
+                'ajaxUrl' => admin_url('admin-ajax.php'),
+                'nonce'   => wp_create_nonce('ri_test_connection'),
+            ]);
+        }
     }
 
     public function handleSave(): void {
@@ -148,5 +169,350 @@ class Admin {
         $wp_roles = RoleMapper::getAvailableWpRoles();
 
         include RI_PLUGIN_DIR . 'admin/settings-page.php';
+    }
+
+    public function renderTestPage(): void {
+        if (!current_user_can('manage_options')) {
+            return;
+        }
+
+        $settings = $this->settings;
+        include RI_PLUGIN_DIR . 'admin/test-page.php';
+    }
+
+    /**
+     * Handler AJAX: esegue i test di connessione OIDC step by step.
+     */
+    public function handleTestConnection(): void {
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error('Permesso negato.');
+        }
+
+        check_ajax_referer('ri_test_connection', 'nonce');
+
+        $step = sanitize_text_field($_POST['step'] ?? '');
+        $result = [];
+
+        switch ($step) {
+            case 'discovery':
+                $result = $this->testDiscovery();
+                break;
+            case 'token_endpoint':
+                $result = $this->testTokenEndpoint();
+                break;
+            case 'userinfo_endpoint':
+                $result = $this->testUserInfoEndpoint();
+                break;
+            case 'full_flow':
+                $result = $this->testFullFlow();
+                break;
+            default:
+                wp_send_json_error('Step non valido.');
+        }
+
+        wp_send_json($result);
+    }
+
+    /**
+     * Test 1: Verifica che il server Identity risponda e abbia gli endpoint OIDC.
+     */
+    private function testDiscovery(): array {
+        $issuer = $this->settings->getIssuer();
+        $discovery_url = $issuer . '/.well-known/openid-configuration';
+
+        $start = microtime(true);
+        $response = wp_remote_get($discovery_url, ['timeout' => 10]);
+        $elapsed = round((microtime(true) - $start) * 1000);
+
+        if (is_wp_error($response)) {
+            return [
+                'success' => false,
+                'step'    => 'discovery',
+                'message' => 'Impossibile raggiungere il server Identity.',
+                'error'   => $response->get_error_message(),
+                'url'     => $discovery_url,
+                'fix'     => 'Verifica che l\'URL issuer sia corretto e che il server sia raggiungibile.',
+            ];
+        }
+
+        $status = wp_remote_retrieve_response_code($response);
+        $body = json_decode(wp_remote_retrieve_body($response), true);
+
+        if ($status !== 200 || empty($body)) {
+            return [
+                'success' => false,
+                'step'    => 'discovery',
+                'message' => "Il server ha risposto con HTTP $status ma non ha restituito una configurazione OIDC valida.",
+                'url'     => $discovery_url,
+                'fix'     => 'Verifica che l\'issuer supporti OpenID Connect Discovery.',
+            ];
+        }
+
+        // Verifica endpoint attesi
+        $expected = ['authorization_endpoint', 'token_endpoint', 'userinfo_endpoint'];
+        $missing = [];
+        foreach ($expected as $key) {
+            if (empty($body[$key])) {
+                $missing[] = $key;
+            }
+        }
+
+        $endpoints = [
+            'authorization_endpoint' => $body['authorization_endpoint'] ?? '—',
+            'token_endpoint'         => $body['token_endpoint'] ?? '—',
+            'userinfo_endpoint'      => $body['userinfo_endpoint'] ?? '—',
+            'end_session_endpoint'   => $body['end_session_endpoint'] ?? '—',
+        ];
+
+        // Verifica che i nostri endpoint configurati coincidano
+        $mismatches = [];
+        if (!empty($body['authorization_endpoint']) && $body['authorization_endpoint'] !== $this->settings->getAuthorizationEndpoint()) {
+            $mismatches['authorization'] = [
+                'configurato' => $this->settings->getAuthorizationEndpoint(),
+                'discovery'   => $body['authorization_endpoint'],
+            ];
+        }
+        if (!empty($body['token_endpoint']) && $body['token_endpoint'] !== $this->settings->getTokenEndpoint()) {
+            $mismatches['token'] = [
+                'configurato' => $this->settings->getTokenEndpoint(),
+                'discovery'   => $body['token_endpoint'],
+            ];
+        }
+
+        // Scopes supportati
+        $supported_scopes = $body['scopes_supported'] ?? [];
+        $our_scopes = explode(' ', $this->settings->getScopes());
+        $unsupported = array_diff($our_scopes, $supported_scopes);
+
+        // Grant types
+        $grant_types = $body['grant_types_supported'] ?? [];
+
+        return [
+            'success'           => empty($missing),
+            'step'              => 'discovery',
+            'message'           => empty($missing)
+                ? "Server Identity raggiungibile e configurato correttamente ({$elapsed}ms)."
+                : 'Endpoint mancanti nella discovery: ' . implode(', ', $missing),
+            'url'               => $discovery_url,
+            'response_time_ms'  => $elapsed,
+            'issuer'            => $body['issuer'] ?? '—',
+            'endpoints'         => $endpoints,
+            'mismatches'        => $mismatches,
+            'scopes_supported'  => $supported_scopes,
+            'unsupported_scopes'=> $unsupported,
+            'grant_types'       => $grant_types,
+        ];
+    }
+
+    /**
+     * Test 2: Verifica che il token endpoint sia raggiungibile (con client_credentials se supportato).
+     */
+    private function testTokenEndpoint(): array {
+        $start = microtime(true);
+
+        $request = [
+            'body' => [
+                'grant_type'    => 'client_credentials',
+                'client_id'     => $this->settings->get('client_id'),
+                'client_secret' => $this->settings->get('client_secret'),
+                'scope'         => 'openid',
+            ],
+            'timeout' => 10,
+        ];
+
+        $response = wp_remote_post($this->settings->getTokenEndpoint(), $request);
+        $elapsed = round((microtime(true) - $start) * 1000);
+
+        if (is_wp_error($response)) {
+            return [
+                'success' => false,
+                'step'    => 'token_endpoint',
+                'message' => 'Impossibile raggiungere il token endpoint.',
+                'error'   => $response->get_error_message(),
+                'url'     => $this->settings->getTokenEndpoint(),
+                'fix'     => 'Verifica la connettività di rete verso il server Identity.',
+            ];
+        }
+
+        $status = wp_remote_retrieve_response_code($response);
+        $body = json_decode(wp_remote_retrieve_body($response), true);
+
+        // client_credentials potrebbe non essere supportato: va bene, ci interessa che risponda
+        $client_valid = true;
+        $fix = '';
+
+        if ($status === 400 && isset($body['error'])) {
+            if ($body['error'] === 'invalid_client') {
+                $client_valid = false;
+                $fix = 'Client ID o Client Secret non validi. Verifica le credenziali nelle impostazioni.';
+            } elseif ($body['error'] === 'unsupported_grant_type') {
+                // OK: il server non supporta client_credentials ma ha risposto — il client è valido
+                $client_valid = true;
+            }
+        } elseif ($status === 401) {
+            $client_valid = false;
+            $fix = 'Autenticazione client fallita (HTTP 401). Verifica Client ID e Client Secret.';
+        }
+
+        return [
+            'success'          => $client_valid,
+            'step'             => 'token_endpoint',
+            'message'          => $client_valid
+                ? "Token endpoint raggiungibile, credenziali client valide ({$elapsed}ms)."
+                : "Token endpoint raggiungibile ma credenziali client non valide.",
+            'url'              => $this->settings->getTokenEndpoint(),
+            'http_status'      => $status,
+            'response_time_ms' => $elapsed,
+            'error'            => $body['error'] ?? null,
+            'error_description'=> $body['error_description'] ?? null,
+            'fix'              => $fix,
+        ];
+    }
+
+    /**
+     * Test 3: Verifica che l'endpoint userinfo sia raggiungibile.
+     */
+    private function testUserInfoEndpoint(): array {
+        $start = microtime(true);
+
+        // Senza un token valido, ci aspettiamo 401 — ma dimostra che l'endpoint esiste
+        $response = wp_remote_get($this->settings->getUserInfoEndpoint(), [
+            'headers' => ['Authorization' => 'Bearer test-invalid-token'],
+            'timeout' => 10,
+        ]);
+        $elapsed = round((microtime(true) - $start) * 1000);
+
+        if (is_wp_error($response)) {
+            return [
+                'success' => false,
+                'step'    => 'userinfo_endpoint',
+                'message' => 'Impossibile raggiungere l\'endpoint userinfo.',
+                'error'   => $response->get_error_message(),
+                'url'     => $this->settings->getUserInfoEndpoint(),
+                'fix'     => 'Verifica che l\'endpoint userinfo sia accessibile.',
+            ];
+        }
+
+        $status = wp_remote_retrieve_response_code($response);
+
+        // 401 è il risultato atteso (token non valido) — significa che l'endpoint esiste
+        $reachable = in_array($status, [200, 401, 403], true);
+
+        // Se l'utente corrente ha un access token salvato, proviamo con quello
+        $user_id = get_current_user_id();
+        $access_token = get_user_meta($user_id, 'ri_access_token', true);
+        $userinfo_data = null;
+
+        if (!empty($access_token)) {
+            $oidc = new OidcClient($this->settings);
+            $userinfo_result = $oidc->getUserInfo($access_token);
+            if (!is_wp_error($userinfo_result)) {
+                $userinfo_data = $userinfo_result;
+            }
+        }
+
+        return [
+            'success'          => $reachable,
+            'step'             => 'userinfo_endpoint',
+            'message'          => $reachable
+                ? "Endpoint userinfo raggiungibile ({$elapsed}ms)."
+                : "L'endpoint userinfo ha risposto con HTTP $status inatteso.",
+            'url'              => $this->settings->getUserInfoEndpoint(),
+            'http_status'      => $status,
+            'response_time_ms' => $elapsed,
+            'has_saved_token'  => !empty($access_token),
+            'userinfo'         => $userinfo_data,
+        ];
+    }
+
+    /**
+     * Test 4: Verifica la configurazione completa (riepilogo).
+     */
+    private function testFullFlow(): array {
+        $checks = [];
+
+        // Check configurazione
+        $checks['issuer'] = [
+            'label'  => 'Issuer URL',
+            'value'  => $this->settings->getIssuer(),
+            'ok'     => !empty($this->settings->getIssuer()),
+            'fix'    => 'Configura l\'URL del server Identity nelle impostazioni.',
+        ];
+
+        $checks['client_id'] = [
+            'label'  => 'Client ID',
+            'value'  => $this->settings->get('client_id'),
+            'ok'     => !empty($this->settings->get('client_id')),
+            'fix'    => 'Configura il Client ID nelle impostazioni.',
+        ];
+
+        $checks['client_secret'] = [
+            'label'  => 'Client Secret',
+            'value'  => !empty($this->settings->get('client_secret')) ? '****' : '(vuoto)',
+            'ok'     => !empty($this->settings->get('client_secret')),
+            'fix'    => 'Configura il Client Secret nelle impostazioni.',
+        ];
+
+        $checks['scopes'] = [
+            'label'  => 'Scope',
+            'value'  => $this->settings->getScopes(),
+            'ok'     => str_contains($this->settings->getScopes(), 'openid'),
+            'fix'    => 'Lo scope "openid" è obbligatorio per OIDC.',
+        ];
+
+        $checks['callback_url'] = [
+            'label'  => 'Callback URL',
+            'value'  => $this->settings->getCallbackUrl(),
+            'ok'     => true,
+            'fix'    => '',
+        ];
+
+        // Verifica redirect URI registrata
+        $checks['redirect_uri'] = [
+            'label'  => 'Redirect URI registrata sul server',
+            'value'  => $this->settings->getCallbackUrl(),
+            'ok'     => true, // Non possiamo verificarlo da qui, ma lo mostriamo
+            'note'   => 'Assicurati che questo URL sia registrato come redirect_uri nel client sul server Identity.',
+        ];
+
+        // Conta utenti OIDC
+        $oidc_users = get_users(['meta_key' => 'ri_oidc_sub', 'count_total' => true, 'number' => 0]);
+        $checks['oidc_users'] = [
+            'label'  => 'Utenti OIDC collegati',
+            'value'  => count($oidc_users),
+            'ok'     => true,
+        ];
+
+        // Ruoli custom registrati
+        $custom_roles = ['studente', 'docente', 'docente_sostegno', 'dirigente'];
+        $missing_roles = [];
+        foreach ($custom_roles as $role) {
+            if (!get_role($role)) {
+                $missing_roles[] = $role;
+            }
+        }
+        $checks['roles'] = [
+            'label'  => 'Ruoli WP personalizzati',
+            'value'  => empty($missing_roles) ? 'Tutti registrati' : 'Mancanti: ' . implode(', ', $missing_roles),
+            'ok'     => empty($missing_roles),
+            'fix'    => 'Disattiva e riattiva il plugin per registrare i ruoli mancanti.',
+        ];
+
+        $all_ok = true;
+        foreach ($checks as $check) {
+            if (!$check['ok']) {
+                $all_ok = false;
+                break;
+            }
+        }
+
+        return [
+            'success' => $all_ok,
+            'step'    => 'full_flow',
+            'message' => $all_ok
+                ? 'Configurazione completa e valida.'
+                : 'Alcuni controlli hanno rilevato problemi.',
+            'checks'  => $checks,
+        ];
     }
 }
