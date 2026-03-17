@@ -1,18 +1,18 @@
 {
   "name": "Raffaello Identity",
-  "version": "1.1.4",
-  "download_url": "https://github.com/danieledignani/raffaello-identity/releases/download/1.1.4/raffaello-identity.zip",
+  "version": "1.1.5",
+  "download_url": "https://github.com/danieledignani/raffaello-identity/releases/download/1.1.5/raffaello-identity.zip",
   "homepage": "https://raffaellolibri.it",
   "requires": "5.8",
   "tested": "6.5",
   "requires_php": "7.4",
-  "last_updated": "2026-03-17 16:14:48",
+  "last_updated": "2026-03-17 16:20:57",
   "upgrade_notice": "Aggiornamento automatico da GitHub",
   "author": "Gruppo Raffaello",
   "author_homepage": "https://github.com/danieledignani",
   "sections": {
     "description": "Integrazione OIDC con GruppoRaffaello.Identity — login, profilo utente, ruoli e scope/claim configurabili.",
     "installation": "Carica il plugin tramite il pannello 'Plugin > Aggiungi nuovo' o scompatta nella cartella wp-content/plugins/",
-    "changelog": "<li>update settings page</li>\n<li>Update JSON to version 1.1.3</li>"
+    "changelog": "<li>Merge branch 'master' of https://github.com/danieledignani/raffaello-identity</li>\n<li>improved acf integration</li>\n<li>Update JSON to version 1.1.4</li>"
   }
 }
