@@ -17,18 +17,21 @@ class RoleMapper {
     }
 
     public function init(): void {
-        // Se ACF è attivo, i campi Identity vengono gestiti da AcfIntegration
-        // Altrimenti usa la tabella nativa come fallback
-        if (!class_exists('ACF') && !function_exists('acf_add_local_field_group')) {
-            add_action('show_user_profile', [$this, 'showIdentityRoles']);
-            add_action('edit_user_profile', [$this, 'showIdentityRoles']);
-        }
+        // Registra sempre gli hook — il metodo showIdentityRoles verifica
+        // a runtime se ACF è attivo (evita problemi di timing su plugins_loaded)
+        add_action('show_user_profile', [$this, 'showIdentityRoles']);
+        add_action('edit_user_profile', [$this, 'showIdentityRoles']);
     }
 
     /**
      * Mostra i ruoli/claim Identity nella pagina profilo admin.
      */
     public function showIdentityRoles(\WP_User $user): void {
+        // Se ACF è attivo, i campi vengono gestiti da AcfIntegration
+        if (class_exists('ACF') || function_exists('acf_add_local_field_group')) {
+            return;
+        }
+
         $userinfo = get_user_meta($user->ID, 'ri_oidc_userinfo', true);
         if (empty($userinfo)) {
             return;

@@ -19,28 +19,30 @@ class AcfIntegration {
     }
 
     public function init(): void {
-        if ($this->isAcfActive()) {
-            add_action('acf/init', [$this, 'registerFieldGroup']);
-            // Disabilita la modifica dei campi OIDC (sono in sola lettura)
-            add_filter('acf/prepare_field/key=field_ri_oidc_sub', [$this, 'makeFieldReadonly']);
-            add_filter('acf/prepare_field/key=field_ri_profilo', [$this, 'makeFieldReadonly']);
-            add_filter('acf/prepare_field/key=field_ri_ruoli_identity', [$this, 'makeFieldReadonly']);
-            add_filter('acf/prepare_field/key=field_ri_consenso_marketing', [$this, 'makeFieldReadonly']);
-            add_filter('acf/prepare_field/key=field_ri_consenso_profilazione', [$this, 'makeFieldReadonly']);
-            add_filter('acf/prepare_field/key=field_ri_consenso_terze_parti', [$this, 'makeFieldReadonly']);
-            add_filter('acf/prepare_field/key=field_ri_joomla_sub', [$this, 'makeFieldReadonly']);
-            add_filter('acf/prepare_field/key=field_ri_token_status', [$this, 'makeFieldReadonly']);
-            add_filter('acf/prepare_field/key=field_ri_last_sync', [$this, 'makeFieldReadonly']);
+        // Registra gli hook ACF incondizionatamente — se ACF non è attivo,
+        // gli hook acf/* semplicemente non scattano. Questo evita problemi di
+        // timing con plugins_loaded (ACF potrebbe non essere ancora caricato).
+        add_action('acf/init', [$this, 'registerFieldGroup']);
 
-            // Carica i valori dal meta esistente per i campi derivati
-            add_filter('acf/load_value/key=field_ri_profilo', [$this, 'loadProfilo'], 10, 3);
-            add_filter('acf/load_value/key=field_ri_ruoli_identity', [$this, 'loadRuoli'], 10, 3);
-            add_filter('acf/load_value/key=field_ri_token_status', [$this, 'loadTokenStatus'], 10, 3);
-            add_filter('acf/load_value/key=field_ri_last_sync', [$this, 'loadLastSync'], 10, 3);
-        } else {
-            // Mostra avviso admin solo nella pagina utenti o impostazioni plugin
-            add_action('admin_notices', [$this, 'showAcfNotice']);
-        }
+        // Disabilita la modifica dei campi OIDC (sono in sola lettura)
+        add_filter('acf/prepare_field/key=field_ri_oidc_sub', [$this, 'makeFieldReadonly']);
+        add_filter('acf/prepare_field/key=field_ri_profilo', [$this, 'makeFieldReadonly']);
+        add_filter('acf/prepare_field/key=field_ri_ruoli_identity', [$this, 'makeFieldReadonly']);
+        add_filter('acf/prepare_field/key=field_ri_consenso_marketing', [$this, 'makeFieldReadonly']);
+        add_filter('acf/prepare_field/key=field_ri_consenso_profilazione', [$this, 'makeFieldReadonly']);
+        add_filter('acf/prepare_field/key=field_ri_consenso_terze_parti', [$this, 'makeFieldReadonly']);
+        add_filter('acf/prepare_field/key=field_ri_joomla_sub', [$this, 'makeFieldReadonly']);
+        add_filter('acf/prepare_field/key=field_ri_token_status', [$this, 'makeFieldReadonly']);
+        add_filter('acf/prepare_field/key=field_ri_last_sync', [$this, 'makeFieldReadonly']);
+
+        // Carica i valori dal meta esistente per i campi derivati
+        add_filter('acf/load_value/key=field_ri_profilo', [$this, 'loadProfilo'], 10, 3);
+        add_filter('acf/load_value/key=field_ri_ruoli_identity', [$this, 'loadRuoli'], 10, 3);
+        add_filter('acf/load_value/key=field_ri_token_status', [$this, 'loadTokenStatus'], 10, 3);
+        add_filter('acf/load_value/key=field_ri_last_sync', [$this, 'loadLastSync'], 10, 3);
+
+        // Avviso ACF: va su init (dopo plugins_loaded) per verificare correttamente se ACF è attivo
+        add_action('admin_notices', [$this, 'maybeShowAcfNotice']);
     }
 
     /**
@@ -268,8 +270,14 @@ class AcfIntegration {
 
     /**
      * Mostra un avviso admin se ACF non è installato.
+     * Chiamato su admin_notices (quando ACF è già certamente caricato se presente).
      */
-    public function showAcfNotice(): void {
+    public function maybeShowAcfNotice(): void {
+        // Se ACF è attivo, nessun avviso
+        if ($this->isAcfActive()) {
+            return;
+        }
+
         $screen = get_current_screen();
         if (!$screen) {
             return;
