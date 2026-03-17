@@ -41,6 +41,9 @@ class AcfIntegration {
         add_filter('acf/load_value/key=field_ri_token_status', [$this, 'loadTokenStatus'], 10, 3);
         add_filter('acf/load_value/key=field_ri_last_sync', [$this, 'loadLastSync'], 10, 3);
 
+        // Nascondi l'intero gruppo per utenti non-OIDC
+        add_filter('acf/pre_render_fields', [$this, 'maybeHideGroupForNonOidc'], 10, 2);
+
         // Avviso ACF: va su init (dopo plugins_loaded) per verificare correttamente se ACF è attivo
         add_action('admin_notices', [$this, 'maybeShowAcfNotice']);
     }
@@ -176,20 +179,41 @@ class AcfIntegration {
     }
 
     /**
+     * Nasconde l'intero field group per utenti che non hanno ri_oidc_sub.
+     * Restituendo un array vuoto, ACF non renderizza nulla (nemmeno l'header).
+     */
+    public function maybeHideGroupForNonOidc(array $fields, $post_id): array {
+        // Verifica che sia il nostro gruppo (controlla la chiave del primo campo)
+        if (empty($fields) || !isset($fields[0]['key']) || strpos($fields[0]['key'], 'field_ri_') !== 0) {
+            return $fields;
+        }
+
+        $user_id = $this->extractUserId($post_id);
+        if (!$user_id) {
+            // Pagina "Il mio profilo"
+            if (defined('IS_PROFILE_PAGE') && IS_PROFILE_PAGE) {
+                $user_id = get_current_user_id();
+            }
+        }
+
+        if (!$user_id) {
+            return []; // Non sappiamo quale utente, nascondi
+        }
+
+        $sub = get_user_meta($user_id, 'ri_oidc_sub', true);
+        if (empty($sub)) {
+            return []; // Utente non OIDC, nascondi tutto il gruppo
+        }
+
+        return $fields;
+    }
+
+    /**
      * Rende un campo ACF in sola lettura (non modificabile dall'admin).
      */
     public function makeFieldReadonly($field) {
         if (!$field) {
             return $field;
-        }
-
-        // Nascondi il campo se l'utente non è collegato a Identity
-        $user_id = $this->getCurrentProfileUserId();
-        if ($user_id) {
-            $sub = get_user_meta($user_id, 'ri_oidc_sub', true);
-            if (empty($sub)) {
-                return false; // Nasconde il campo
-            }
         }
 
         $field['readonly'] = 1;
@@ -323,14 +347,4 @@ class AcfIntegration {
         return 0;
     }
 
-    /**
-     * Ottieni lo user ID del profilo attualmente visualizzato.
-     */
-    private function getCurrentProfileUserId(): int {
-        if (defined('IS_PROFILE_PAGE') && IS_PROFILE_PAGE) {
-            return get_current_user_id();
-        }
-        // Nella pagina edit utente
-        return isset($_GET['user_id']) ? (int) $_GET['user_id'] : 0;
-    }
 }
