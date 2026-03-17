@@ -58,6 +58,9 @@ add_action('plugins_loaded', function () {
     $roles = new RaffaelloIdentity\RoleMapper($settings);
     $roles->init();
 
+    $acf = new RaffaelloIdentity\AcfIntegration($settings);
+    $acf->init();
+
     if (is_admin()) {
         $admin = new RaffaelloIdentity\Admin($settings);
         $admin->init();

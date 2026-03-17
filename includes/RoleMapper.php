@@ -17,9 +17,12 @@ class RoleMapper {
     }
 
     public function init(): void {
-        // Mostra il ruolo Identity nel profilo admin
-        add_action('show_user_profile', [$this, 'showIdentityRoles']);
-        add_action('edit_user_profile', [$this, 'showIdentityRoles']);
+        // Se ACF è attivo, i campi Identity vengono gestiti da AcfIntegration
+        // Altrimenti usa la tabella nativa come fallback
+        if (!class_exists('ACF') && !function_exists('acf_add_local_field_group')) {
+            add_action('show_user_profile', [$this, 'showIdentityRoles']);
+            add_action('edit_user_profile', [$this, 'showIdentityRoles']);
+        }
     }
 
     /**

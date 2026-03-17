@@ -21,6 +21,7 @@ class Admin {
         add_action('admin_init', [$this, 'handleSave']);
         add_action('admin_enqueue_scripts', [$this, 'enqueueAssets']);
         add_action('wp_ajax_ri_test_connection', [$this, 'handleTestConnection']);
+        add_action('wp_ajax_ri_dismiss_acf_notice', [$this, 'handleDismissAcfNotice']);
     }
 
     public function addMenuPage(): void {
@@ -188,6 +189,15 @@ class Admin {
     /**
      * Handler AJAX: esegue i test di connessione OIDC step by step.
      */
+    /**
+     * Gestisce la dismissione dell'avviso ACF.
+     */
+    public function handleDismissAcfNotice(): void {
+        check_ajax_referer('ri_dismiss_acf_notice');
+        update_user_meta(get_current_user_id(), 'ri_acf_notice_dismissed', 1);
+        wp_send_json_success();
+    }
+
     public function handleTestConnection(): void {
         if (!current_user_can('manage_options')) {
             wp_send_json_error('Permesso negato.');
