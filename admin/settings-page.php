@@ -392,6 +392,54 @@ function ri_locked_notice(string $option_key, array $ri_constants): void {
         </table>
     </div>
 
+    <!-- Plugin consigliati -->
+    <div class="ri-section">
+        <h2>Plugin consigliati</h2>
+        <p class="description">Plugin che estendono le funzionalità di Raffaello Identity.</p>
+        <table class="widefat" style="max-width:700px;">
+            <thead>
+                <tr><th>Plugin</th><th>Funzione</th><th>Stato</th></tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><strong>Advanced Custom Fields (ACF)</strong></td>
+                    <td>Visualizza i dati OIDC (Subject ID, Profilo, Ruoli, Consensi) nei profili utente tramite campi strutturati e gestisce i ruoli richiesti per pagine/post.</td>
+                    <td>
+                        <?php if (class_exists('ACF')) : ?>
+                            <span style="color:#00a32a;">&#10003; Attivo</span>
+                        <?php else : ?>
+                            <span style="color:#d63638;">Non installato</span>
+                            — <a href="<?php echo esc_url(admin_url('plugin-install.php?s=Advanced+Custom+Fields&tab=search&type=term')); ?>">Installa</a>
+                        <?php endif; ?>
+                    </td>
+                </tr>
+                <tr>
+                    <td><strong>Members</strong></td>
+                    <td>Gestione avanzata dei permessi per ruolo: restrizione pagine/post dall'editor, widget condizionali, shortcode per contenuti riservati.</td>
+                    <td>
+                        <?php if (defined('MEMBERS_VERSION') || class_exists('Members_Plugin')) : ?>
+                            <span style="color:#00a32a;">&#10003; Attivo</span>
+                        <?php else : ?>
+                            <span style="color:#999;">Non installato</span>
+                            — <a href="<?php echo esc_url(admin_url('plugin-install.php?s=Members+Justin+Tadlock&tab=search&type=term')); ?>">Installa</a>
+                        <?php endif; ?>
+                    </td>
+                </tr>
+                <tr>
+                    <td><strong>WooCommerce</strong></td>
+                    <td>Se installato, il plugin sovrascrive login/registrazione WooCommerce e integra il ruolo <code>customer</code> come default.</td>
+                    <td>
+                        <?php if (class_exists('WooCommerce')) : ?>
+                            <span style="color:#00a32a;">&#10003; Attivo</span>
+                        <?php else : ?>
+                            <span style="color:#999;">Non rilevato</span>
+                        <?php endif; ?>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
 <script>
 (function() {
     // Aggiungi riga mappatura ruoli

@@ -9,7 +9,7 @@ if (!defined('ABSPATH')) {
 /** @var string $level_filter */
 /** @var string $event_filter */
 
-$base_url = add_query_arg(['page' => 'raffaello-identity', 'tab' => 'log'], admin_url('options-general.php'));
+$base_url = add_query_arg(['page' => 'raffaello-identity', 'tab' => 'log'], admin_url('admin.php'));
 $levels = ['', 'DEBUG', 'INFO', 'WARNING', 'ERROR'];
 $level_colors = [
     'DEBUG'   => '#6c757d',

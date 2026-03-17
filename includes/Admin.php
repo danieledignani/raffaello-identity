@@ -25,17 +25,26 @@ class Admin {
     }
 
     public function addMenuPage(): void {
-        add_options_page(
+        // Icona SVG inline per il menu admin (20x20, monocolore)
+        $icon_svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none">'
+            . '<path d="M128 40 L200 80 L200 140 C200 185 168 220 128 232 C88 220 56 185 56 140 L56 80 Z" fill="currentColor" opacity="0.3"/>'
+            . '<path d="M96 90 L96 180 M96 90 L140 90 C158 90 170 102 170 118 C170 134 158 144 140 144 L96 144 M140 144 L170 180" stroke="currentColor" stroke-width="14" stroke-linecap="round" stroke-linejoin="round" fill="none"/>'
+            . '</svg>';
+        $icon_base64 = 'data:image/svg+xml;base64,' . base64_encode($icon_svg);
+
+        add_menu_page(
             'Raffaello Identity',
-            'Raffaello Identity',
+            'Identity',
             'manage_options',
             'raffaello-identity',
-            [$this, 'renderPage']
+            [$this, 'renderPage'],
+            $icon_base64,
+            81 // Dopo Impostazioni (80)
         );
     }
 
     public function enqueueAssets(string $hook): void {
-        if ($hook !== 'settings_page_raffaello-identity') {
+        if ($hook !== 'toplevel_page_raffaello-identity') {
             return;
         }
         wp_enqueue_style('ri-admin', RI_PLUGIN_URL . 'assets/css/admin.css', [], RI_VERSION);
@@ -68,7 +77,7 @@ class Admin {
         // Tab navigation
         echo '<nav class="nav-tab-wrapper">';
         foreach ($tabs as $slug => $label) {
-            $url = add_query_arg(['page' => 'raffaello-identity', 'tab' => $slug], admin_url('options-general.php'));
+            $url = add_query_arg(['page' => 'raffaello-identity', 'tab' => $slug], admin_url('admin.php'));
             $active = ($slug === $current_tab) ? ' nav-tab-active' : '';
             printf('<a href="%s" class="nav-tab%s">%s</a>', esc_url($url), $active, esc_html($label));
         }

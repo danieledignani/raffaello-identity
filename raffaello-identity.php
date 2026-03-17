@@ -61,6 +61,9 @@ add_action('plugins_loaded', function () {
     $acf = new RaffaelloIdentity\AcfIntegration($settings);
     $acf->init();
 
+    $restriction = new RaffaelloIdentity\ContentRestriction($settings);
+    $restriction->init();
+
     if (is_admin()) {
         $admin = new RaffaelloIdentity\Admin($settings);
         $admin->init();

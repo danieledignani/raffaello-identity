@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none">
+  <!-- Sfondo cerchio blu Raffaello -->
+  <circle cx="128" cy="128" r="120" fill="#1e3a5f"/>
+
+  <!-- Scudo Identity -->
+  <path d="M128 40 L200 80 L200 140 C200 185 168 220 128 232 C88 220 56 185 56 140 L56 80 Z"
+        fill="#2a5f9e" stroke="#fff" stroke-width="3"/>
+
+  <!-- R stilizzata -->
+  <path d="M96 90 L96 180 M96 90 L140 90 C158 90 170 102 170 118 C170 134 158 144 140 144 L96 144 M140 144 L170 180"
+        stroke="#fff" stroke-width="12" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+
+  <!-- Punto chiave (lucchetto stilizzato) -->
+  <circle cx="168" cy="186" r="16" fill="#f0c33c" stroke="#1e3a5f" stroke-width="2"/>
+  <rect x="162" y="176" width="12" height="10" rx="6" fill="none" stroke="#1e3a5f" stroke-width="2"
+        transform="translate(0,-8)"/>
+  <circle cx="168" cy="188" r="3" fill="#1e3a5f"/>
+</svg>

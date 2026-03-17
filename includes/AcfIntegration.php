@@ -276,7 +276,7 @@ class AcfIntegration {
         }
 
         // Mostra solo nelle pagine utenti o nella pagina del plugin
-        $relevant_screens = ['users', 'user-edit', 'profile', 'settings_page_raffaello-identity'];
+        $relevant_screens = ['users', 'user-edit', 'profile', 'toplevel_page_raffaello-identity'];
         if (!in_array($screen->id, $relevant_screens, true)) {
             return;
         }
