@@ -1,0 +1,436 @@
+/* ===== Raffaello Identity — Frontend Styles ===== */
+
+:root {
+    --ri-primary: #1a5276;
+    --ri-primary-hover: #154360;
+    --ri-secondary: #2980b9;
+    --ri-bg: #f8f9fa;
+    --ri-card-bg: #ffffff;
+    --ri-border: #e0e0e0;
+    --ri-text: #333333;
+    --ri-text-muted: #6c757d;
+    --ri-radius: 8px;
+    --ri-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+}
+
+/* Login Button */
+.ri-login-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 28px;
+    border-radius: var(--ri-radius);
+    font-size: 16px;
+    font-weight: 600;
+    text-decoration: none;
+    transition: all 0.2s ease;
+    cursor: pointer;
+    border: none;
+}
+
+.ri-login-btn-primary {
+    background: var(--ri-primary);
+    color: #ffffff;
+}
+
+.ri-login-btn-primary:hover {
+    background: var(--ri-primary-hover);
+    color: #ffffff;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(26, 82, 118, 0.3);
+}
+
+.ri-logout-btn {
+    display: inline-flex;
+    align-items: center;
+    padding: 8px 20px;
+    border-radius: var(--ri-radius);
+    font-size: 14px;
+    text-decoration: none;
+    color: var(--ri-text-muted);
+    border: 1px solid var(--ri-border);
+    transition: all 0.2s ease;
+}
+
+.ri-logout-btn:hover {
+    color: #c0392b;
+    border-color: #c0392b;
+}
+
+/* Login Form */
+.ri-login-form {
+    display: flex;
+    justify-content: center;
+    padding: 20px 0;
+}
+
+.ri-login-card {
+    background: var(--ri-card-bg);
+    border-radius: var(--ri-radius);
+    box-shadow: var(--ri-shadow);
+    max-width: 420px;
+    width: 100%;
+    overflow: hidden;
+}
+
+.ri-login-header {
+    padding: 32px 32px 16px;
+    text-align: center;
+}
+
+.ri-login-header h2 {
+    margin: 0 0 8px;
+    font-size: 24px;
+    color: var(--ri-text);
+}
+
+.ri-login-header p {
+    margin: 0;
+    color: var(--ri-text-muted);
+    font-size: 14px;
+}
+
+.ri-login-body {
+    padding: 16px 32px 24px;
+    text-align: center;
+}
+
+.ri-login-body .ri-login-btn {
+    width: 100%;
+    justify-content: center;
+}
+
+.ri-login-footer {
+    padding: 16px 32px;
+    text-align: center;
+    background: var(--ri-bg);
+    border-top: 1px solid var(--ri-border);
+}
+
+.ri-login-footer p {
+    margin: 0;
+    font-size: 14px;
+    color: var(--ri-text-muted);
+}
+
+.ri-login-footer a {
+    color: var(--ri-secondary);
+    text-decoration: none;
+    font-weight: 500;
+}
+
+.ri-login-footer a:hover {
+    text-decoration: underline;
+}
+
+/* Logged in message */
+.ri-logged-in {
+    text-align: center;
+    padding: 20px;
+}
+
+.ri-logged-in a {
+    color: var(--ri-secondary);
+    text-decoration: none;
+}
+
+.ri-not-logged-in {
+    text-align: center;
+    padding: 20px;
+}
+
+/* Profile */
+.ri-profile {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 20px 0;
+}
+
+.ri-profile-card {
+    background: var(--ri-card-bg);
+    border-radius: var(--ri-radius);
+    box-shadow: var(--ri-shadow);
+    overflow: hidden;
+}
+
+.ri-profile-header {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    padding: 32px;
+    background: linear-gradient(135deg, var(--ri-primary), var(--ri-secondary));
+    color: #ffffff;
+}
+
+.ri-profile-avatar img {
+    border-radius: 50%;
+    border: 3px solid rgba(255, 255, 255, 0.3);
+}
+
+.ri-profile-name h2 {
+    margin: 0;
+    font-size: 22px;
+    color: #ffffff;
+}
+
+.ri-profile-badge {
+    display: inline-block;
+    margin-top: 4px;
+    padding: 2px 12px;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 20px;
+    font-size: 13px;
+}
+
+.ri-profile-body {
+    padding: 24px 32px;
+}
+
+.ri-profile-section {
+    margin-bottom: 24px;
+}
+
+.ri-profile-section:last-child {
+    margin-bottom: 0;
+}
+
+.ri-profile-section h3 {
+    margin: 0 0 16px;
+    font-size: 16px;
+    color: var(--ri-text);
+    border-bottom: 1px solid var(--ri-border);
+    padding-bottom: 8px;
+}
+
+.ri-profile-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+}
+
+@media (max-width: 480px) {
+    .ri-profile-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .ri-profile-header {
+        flex-direction: column;
+        text-align: center;
+    }
+}
+
+.ri-profile-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.ri-profile-field label {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--ri-text-muted);
+    font-weight: 600;
+}
+
+.ri-profile-field span {
+    font-size: 15px;
+    color: var(--ri-text);
+}
+
+.ri-profile-footer {
+    display: flex;
+    gap: 12px;
+    padding: 20px 32px;
+    background: var(--ri-bg);
+    border-top: 1px solid var(--ri-border);
+}
+
+@media (max-width: 480px) {
+    .ri-profile-footer {
+        flex-direction: column;
+    }
+}
+
+/* Buttons */
+.ri-btn {
+    display: inline-flex;
+    align-items: center;
+    padding: 10px 20px;
+    border-radius: var(--ri-radius);
+    font-size: 14px;
+    font-weight: 500;
+    text-decoration: none;
+    transition: all 0.2s ease;
+    cursor: pointer;
+    border: none;
+}
+
+.ri-btn-secondary {
+    background: var(--ri-secondary);
+    color: #ffffff;
+}
+
+.ri-btn-secondary:hover {
+    background: var(--ri-primary);
+    color: #ffffff;
+}
+
+.ri-btn-outline {
+    background: transparent;
+    color: var(--ri-text-muted);
+    border: 1px solid var(--ri-border);
+}
+
+.ri-btn-outline:hover {
+    color: #c0392b;
+    border-color: #c0392b;
+}
+
+/* WP Login Page Override */
+.ri-wp-login-separator {
+    position: relative;
+    text-align: center;
+    margin: 20px 0;
+    border-top: 1px solid #ddd;
+}
+
+.ri-wp-login-separator span {
+    background: #fff;
+    padding: 0 12px;
+    position: relative;
+    top: -10px;
+    color: #999;
+    font-size: 13px;
+}
+
+.ri-wp-login-btn {
+    display: block;
+    text-align: center;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.ri-icon {
+    flex-shrink: 0;
+}
+
+/* ===== User Menu (shortcode [ri_user_menu]) ===== */
+.ri-user-menu {
+    position: relative;
+    display: inline-block;
+}
+
+.ri-user-menu-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: none;
+    border: 1px solid var(--ri-border);
+    border-radius: var(--ri-radius);
+    padding: 6px 14px;
+    cursor: pointer;
+    font-size: 14px;
+    color: var(--ri-text);
+    transition: all 0.2s ease;
+}
+
+.ri-user-menu-toggle:hover {
+    border-color: var(--ri-secondary);
+    color: var(--ri-secondary);
+}
+
+.ri-user-menu-toggle img {
+    border-radius: 50%;
+    width: 32px;
+    height: 32px;
+}
+
+.ri-user-menu-name {
+    max-width: 150px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ri-user-menu-arrow {
+    font-size: 10px;
+    transition: transform 0.2s;
+}
+
+.ri-user-menu-toggle[aria-expanded="true"] .ri-user-menu-arrow {
+    transform: rotate(180deg);
+}
+
+.ri-user-menu-dropdown {
+    display: none;
+    position: absolute;
+    right: 0;
+    top: 100%;
+    margin-top: 4px;
+    min-width: 180px;
+    background: var(--ri-card-bg);
+    border: 1px solid var(--ri-border);
+    border-radius: var(--ri-radius);
+    box-shadow: var(--ri-shadow);
+    list-style: none;
+    padding: 4px 0;
+    z-index: 9999;
+}
+
+.ri-user-menu-dropdown.ri-open {
+    display: block;
+}
+
+.ri-user-menu-dropdown li a {
+    display: block;
+    padding: 8px 16px;
+    color: var(--ri-text);
+    text-decoration: none;
+    font-size: 14px;
+    transition: background 0.15s;
+}
+
+.ri-user-menu-dropdown li a:hover {
+    background: var(--ri-bg);
+    color: var(--ri-primary);
+}
+
+.ri-user-menu-separator {
+    border-top: 1px solid var(--ri-border);
+    margin: 4px 0;
+}
+
+.ri-user-menu-logout {
+    color: #c0392b !important;
+}
+
+.ri-user-menu-login {
+    display: inline-flex;
+    align-items: center;
+    padding: 8px 20px;
+    background: var(--ri-primary);
+    color: #ffffff !important;
+    border-radius: var(--ri-radius);
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 500;
+    transition: background 0.2s;
+}
+
+.ri-user-menu-login:hover {
+    background: var(--ri-primary-hover);
+    color: #ffffff !important;
+}
+
+/* WooCommerce override */
+.ri-wc-login-override,
+.ri-wc-register-override {
+    text-align: center;
+    padding: 30px 20px;
+}
+
+.ri-wc-login-override p,
+.ri-wc-register-override p {
+    margin: 10px 0;
+}

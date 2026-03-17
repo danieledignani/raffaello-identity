@@ -1,0 +1,92 @@
+/* ===== Raffaello Identity — Admin Styles ===== */
+
+.ri-admin-wrap {
+    max-width: 900px;
+}
+
+.ri-section {
+    background: #fff;
+    border: 1px solid #ccd0d4;
+    border-radius: 4px;
+    padding: 20px;
+    margin-bottom: 24px;
+}
+
+.ri-section h2 {
+    margin-top: 0;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #eee;
+}
+
+.ri-mapping-table {
+    margin-bottom: 12px;
+}
+
+.ri-mapping-table td {
+    vertical-align: middle;
+}
+
+.ri-mapping-table .regular-text {
+    width: 100%;
+}
+
+.ri-remove-row {
+    color: #a00;
+    cursor: pointer;
+    font-size: 18px;
+    line-height: 1;
+}
+
+.ri-remove-row:hover {
+    color: #dc3232;
+}
+
+/* Log page */
+.ri-log-count {
+    font-size: 14px;
+    font-weight: 400;
+    color: #666;
+}
+
+.ri-log-filters {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.ri-log-filters form {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.ri-log-filters label {
+    font-weight: 600;
+    font-size: 13px;
+}
+
+.ri-log-table {
+    margin-top: 12px;
+}
+
+.ri-log-table td,
+.ri-log-table th {
+    vertical-align: top;
+    font-size: 13px;
+}
+
+.ri-log-table code {
+    background: none;
+    padding: 0;
+}
+
+.ri-context-row td {
+    background: #fafafa;
+}
+
+.ri-log-badge {
+    display: inline-block;
+    white-space: nowrap;
+}
