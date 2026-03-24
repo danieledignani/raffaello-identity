@@ -28,8 +28,8 @@ class Frontend {
         add_shortcode('ri_login_form', [$this, 'renderLoginForm']);
         add_shortcode('ri_user_menu', [$this, 'renderUserMenu']);
 
-        // Intercetta il login form standard di WP
-        add_action('login_form', [$this, 'addOidcButtonToLoginForm']);
+        // Non aggiungere il pulsante OIDC al form wp-login.php:
+        // gli utenti Identity non sono amministratori WordPress.
 
         // Redirect login WP al login OIDC (opzionale)
         add_filter('login_url', [$this, 'filterLoginUrl'], 10, 3);
@@ -181,9 +181,8 @@ class Frontend {
      * Filtra l'URL di login standard per reindirizzare al login OIDC.
      */
     public function filterLoginUrl(string $login_url, string $redirect, bool $force_reauth): string {
-        if ($this->settings->get('override_wp_login', false)) {
-            return $this->oidc->getAuthorizationUrl();
-        }
+        // Non sovrascrivere il login di wp-admin: gli amministratori devono
+        // sempre poter accedere con le credenziali WordPress locali.
         return $login_url;
     }
 

@@ -649,14 +649,14 @@ class OidcClient {
             return;
         }
 
-        // Esegui il refresh
+        // Esegui il refresh — se il server Identity è irraggiungibile,
+        // non forzare il logout: l'utente può continuare a navigare
+        // e il refresh verrà ritentato al prossimo page load.
         $result = $this->refreshToken($user_id);
         if (is_wp_error($result)) {
-            Logger::error('auto_refresh_failed', "Refresh automatico fallito per utente #$user_id — logout", [
+            Logger::warning('auto_refresh_failed', "Refresh automatico fallito per utente #$user_id — sessione mantenuta, ritenterà al prossimo caricamento", [
                 'error' => $result->get_error_message(),
             ]);
-            do_action('ri_session_expired', $user_id);
-            $this->forceLogout($user_id);
         }
     }
 
