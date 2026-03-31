@@ -27,6 +27,9 @@ class OidcClient {
 
         // Token refresh automatico ad ogni page load per utenti loggati
         add_action('wp_loaded', [$this, 'ensureTokensFresh']);
+
+        // Sovrascrive l'avatar Gravatar con quello dal server Identity
+        add_filter('get_avatar_url', [$this, 'filterAvatarUrl'], 10, 3);
     }
 
     /**
@@ -475,6 +478,9 @@ class OidcClient {
         update_user_meta($user_id, 'ri_oidc_sub', $sub);
         update_user_meta($user_id, 'ri_oidc_userinfo', $userinfo);
 
+        // Scarica e salva l'avatar dal server Identity
+        $this->syncAvatar($user_id, $userinfo);
+
         // Salva claim extra configurati
         foreach ($this->settings->getExtraClaims() as $claim) {
             if (isset($userinfo[$claim])) {
@@ -716,6 +722,120 @@ class OidcClient {
         do_action('ri_token_refreshed', $user_id, $body);
 
         return $body;
+    }
+
+    /**
+     * Scarica l'avatar dal server Identity e lo salva nella cartella uploads di WordPress.
+     */
+    private function syncAvatar(int $user_id, array $userinfo): void {
+        $picture_url = $userinfo['picture'] ?? '';
+
+        if (empty($picture_url)) {
+            // Nessun avatar sul server Identity: rimuovi eventuale avatar locale
+            $old_path = get_user_meta($user_id, 'ri_avatar_path', true);
+            if (!empty($old_path) && file_exists($old_path)) {
+                @unlink($old_path);
+            }
+            delete_user_meta($user_id, 'ri_avatar_url');
+            delete_user_meta($user_id, 'ri_avatar_path');
+            return;
+        }
+
+        // Controlla se l'URL è cambiato dall'ultimo sync
+        $current_url = get_user_meta($user_id, 'ri_avatar_source_url', true);
+        if ($current_url === $picture_url) {
+            return; // Avatar non cambiato
+        }
+
+        // Scarica l'immagine dal server Identity
+        $response = wp_remote_get($picture_url, ['timeout' => 15]);
+        if (is_wp_error($response) || wp_remote_retrieve_response_code($response) !== 200) {
+            Logger::warning('avatar_download_failed', "Download avatar fallito per utente #$user_id", [
+                'picture_url' => $picture_url,
+                'error'       => is_wp_error($response) ? $response->get_error_message() : 'HTTP ' . wp_remote_retrieve_response_code($response),
+            ]);
+            return;
+        }
+
+        $image_data = wp_remote_retrieve_body($response);
+        $content_type = wp_remote_retrieve_header($response, 'content-type');
+
+        // Determina estensione dal content-type
+        $ext_map = [
+            'image/jpeg' => '.jpg',
+            'image/png'  => '.png',
+            'image/gif'  => '.gif',
+            'image/webp' => '.webp',
+        ];
+        $ext = $ext_map[$content_type] ?? '.jpg';
+
+        // Salva nella cartella uploads/ri-avatars/
+        $upload_dir = wp_upload_dir();
+        $avatar_dir = $upload_dir['basedir'] . '/ri-avatars';
+        if (!is_dir($avatar_dir)) {
+            wp_mkdir_p($avatar_dir);
+        }
+
+        $filename = 'avatar-' . $user_id . $ext;
+        $filepath = $avatar_dir . '/' . $filename;
+        $fileurl = $upload_dir['baseurl'] . '/ri-avatars/' . $filename;
+
+        // Rimuovi vecchio avatar se estensione diversa
+        $old_path = get_user_meta($user_id, 'ri_avatar_path', true);
+        if (!empty($old_path) && $old_path !== $filepath && file_exists($old_path)) {
+            @unlink($old_path);
+        }
+
+        // Scrivi il file
+        $written = file_put_contents($filepath, $image_data);
+        if ($written === false) {
+            Logger::error('avatar_save_failed', "Impossibile salvare avatar per utente #$user_id", [
+                'filepath' => $filepath,
+            ]);
+            return;
+        }
+
+        update_user_meta($user_id, 'ri_avatar_url', $fileurl);
+        update_user_meta($user_id, 'ri_avatar_path', $filepath);
+        update_user_meta($user_id, 'ri_avatar_source_url', $picture_url);
+
+        Logger::info('avatar_synced', "Avatar sincronizzato per utente #$user_id", [
+            'picture_url' => $picture_url,
+            'local_url'   => $fileurl,
+        ]);
+    }
+
+    /**
+     * Sovrascrive l'URL dell'avatar Gravatar con quello scaricato dal server Identity.
+     */
+    public function filterAvatarUrl($url, $id_or_email, $args) {
+        $user_id = 0;
+
+        if (is_numeric($id_or_email)) {
+            $user_id = (int) $id_or_email;
+        } elseif ($id_or_email instanceof \WP_User) {
+            $user_id = $id_or_email->ID;
+        } elseif ($id_or_email instanceof \WP_Post) {
+            $user_id = (int) $id_or_email->post_author;
+        } elseif ($id_or_email instanceof \WP_Comment) {
+            if (!empty($id_or_email->user_id)) {
+                $user_id = (int) $id_or_email->user_id;
+            }
+        } elseif (is_string($id_or_email)) {
+            $user = get_user_by('email', $id_or_email);
+            if ($user) {
+                $user_id = $user->ID;
+            }
+        }
+
+        if ($user_id > 0) {
+            $custom_url = get_user_meta($user_id, 'ri_avatar_url', true);
+            if (!empty($custom_url)) {
+                return $custom_url;
+            }
+        }
+
+        return $url;
     }
 
     /**
