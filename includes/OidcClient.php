@@ -30,6 +30,10 @@ class OidcClient {
 
         // Sovrascrive l'avatar Gravatar con quello dal server Identity
         add_filter('get_avatar_url', [$this, 'filterAvatarUrl'], 10, 3);
+
+        // Per gli utenti OIDC, tutti i link di logout (WooCommerce, WP, ecc.)
+        // devono passare dal logout federato sul server Identity
+        add_filter('logout_url', [$this, 'filterLogoutUrl'], 10, 2);
     }
 
     /**
@@ -803,6 +807,25 @@ class OidcClient {
             'picture_url' => $picture_url,
             'local_url'   => $fileurl,
         ]);
+    }
+
+    /**
+     * Per gli utenti OIDC, sostituisce l'URL di logout standard di WordPress
+     * con il logout federato che passa dal server Identity.
+     * Risolve il problema del "Logout" WooCommerce che fa solo logout locale.
+     */
+    public function filterLogoutUrl(string $logout_url, string $redirect): string {
+        if (!is_user_logged_in()) {
+            return $logout_url;
+        }
+
+        $user_id = get_current_user_id();
+        $sub = get_user_meta($user_id, 'ri_oidc_sub', true);
+        if (empty($sub)) {
+            return $logout_url; // Non è un utente OIDC
+        }
+
+        return admin_url('admin-ajax.php?action=ri_logout');
     }
 
     /**
