@@ -297,7 +297,7 @@ class ContentRestriction {
     // =========================================================================
 
     /**
-     * Shortcode [ri_restrict role="docente,dirigente" logged_in="true"]contenuto[/ri_restrict]
+     * Shortcode [ri_restrict role="docente" logged_in="true"]contenuto[/ri_restrict]
      *
      * Attributi:
      * - role: lista ruoli separati da virgola (l'utente deve averne almeno uno)
@@ -365,7 +365,7 @@ class ContentRestriction {
         $choices = [];
 
         // Metti in cima i ruoli Identity custom
-        $identity_first = ['studente', 'docente', 'docente_sostegno', 'dirigente', 'customer'];
+        $identity_first = ['studente', 'docente', 'customer'];
         foreach ($identity_first as $slug) {
             if (isset($wp_roles[$slug])) {
                 $choices[$slug] = $wp_roles[$slug];

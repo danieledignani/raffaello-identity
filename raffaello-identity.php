@@ -76,10 +76,8 @@ add_action('plugins_loaded', function () {
 // Attivazione: crea ruoli WP e tabella log
 register_activation_hook(__FILE__, function () {
     $default_roles = [
-        'studente'           => 'Studente',
-        'docente'            => 'Docente',
-        'docente_sostegno'   => 'Docente di Sostegno',
-        'dirigente'          => 'Dirigente',
+        'studente' => 'Studente',
+        'docente'  => 'Docente',
     ];
     foreach ($default_roles as $slug => $label) {
         if (!get_role($slug)) {

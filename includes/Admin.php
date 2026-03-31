@@ -595,7 +595,7 @@ class Admin {
             'ok'     => true,
         ];
 
-        $custom_roles = ['studente', 'docente', 'docente_sostegno', 'dirigente'];
+        $custom_roles = ['studente', 'docente'];
         $missing_roles = [];
         foreach ($custom_roles as $role) {
             if (!get_role($role)) {

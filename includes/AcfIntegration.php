@@ -126,8 +126,18 @@ class AcfIntegration {
             ];
         }
 
+        if (in_array('sostegno', $extra_claims, true)) {
+            $fields[] = [
+                'key'   => 'field_ri_sostegno',
+                'label' => 'Docente di sostegno',
+                'name'  => 'ri_claim_sostegno',
+                'type'  => 'text',
+            ];
+            add_filter('acf/prepare_field/key=field_ri_sostegno', [$this, 'makeFieldReadonly']);
+        }
+
         // Aggiungi eventuali altri extra claims non gestiti sopra
-        $known_claims = ['profilo', 'consensoMarketing', 'consensoProfilazione', 'consensoTerzeParti', 'joomla_sub'];
+        $known_claims = ['profilo', 'sostegno', 'consensoMarketing', 'consensoProfilazione', 'consensoTerzeParti', 'joomla_sub'];
         foreach ($extra_claims as $claim) {
             if (!in_array($claim, $known_claims, true)) {
                 $fields[] = [
@@ -230,7 +240,12 @@ class AcfIntegration {
             return $value;
         }
         $userinfo = get_user_meta($user_id, 'ri_oidc_userinfo', true);
-        return !empty($userinfo['profilo']) ? $userinfo['profilo'] : 'N/D';
+        $profilo = !empty($userinfo['profilo']) ? $userinfo['profilo'] : 'N/D';
+        $sostegno = !empty($userinfo['sostegno']) && filter_var($userinfo['sostegno'], FILTER_VALIDATE_BOOLEAN);
+        if ($sostegno) {
+            $profilo .= ' (Sostegno)';
+        }
+        return $profilo;
     }
 
     /**

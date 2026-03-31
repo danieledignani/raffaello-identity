@@ -15,7 +15,7 @@ Plugin WordPress per l'integrazione SSO con il server GruppoRaffaello.Identity t
 
 Funzionalità:
 * Login SSO con il server Identity Raffaello
-* Mappatura automatica ruoli (Studente, Docente, Dirigente, ecc.) → ruoli WordPress
+* Mappatura automatica ruoli (Studente, Docente) → ruoli WordPress
 * Claim e scope configurabili dall'admin WordPress
 * Pagina profilo utente frontend con dati Identity
 * Auto-registrazione utenti al primo login

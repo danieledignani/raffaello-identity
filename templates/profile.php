@@ -15,6 +15,7 @@ $roles = array_map(function ($role) {
     return $role_obj ? translate_user_role(ucfirst($role)) : ucfirst($role);
 }, $user->roles);
 $profilo = esc_html($userinfo['profilo'] ?? '');
+$sostegno = !empty($userinfo['sostegno']) && filter_var($userinfo['sostegno'], FILTER_VALIDATE_BOOLEAN);
 ?>
 <div class="ri-profile">
     <div class="ri-profile-card">
@@ -26,6 +27,9 @@ $profilo = esc_html($userinfo['profilo'] ?? '');
                 <h2><?php echo trim("$nome $cognome") ?: esc_html($user->display_name); ?></h2>
                 <?php if ($profilo) : ?>
                     <span class="ri-profile-badge"><?php echo $profilo; ?></span>
+                <?php endif; ?>
+                <?php if ($sostegno) : ?>
+                    <span class="ri-profile-badge ri-profile-badge--secondary">Sostegno</span>
                 <?php endif; ?>
             </div>
         </div>
@@ -63,7 +67,9 @@ $profilo = esc_html($userinfo['profilo'] ?? '');
 
                         // Label leggibile
                         $labels = [
-                            'consensoMarketing'    => 'Consenso Marketing',
+                            'profilo'               => 'Profilo',
+                            'sostegno'              => 'Docente di sostegno',
+                            'consensoMarketing'     => 'Consenso Marketing',
                             'consensoProfilazione'  => 'Consenso Profilazione',
                             'consensoTerzeParti'    => 'Consenso Terze Parti',
                             'joomla_sub'            => 'ID Joomla',
