@@ -21,12 +21,22 @@ class Frontend {
     public function init(): void {
         add_action('wp_enqueue_scripts', [$this, 'enqueueAssets']);
 
-        // Shortcodes
+        // Shortcodes bottone / blocco completo
         add_shortcode('ri_login', [$this, 'renderLoginButton']);
         add_shortcode('ri_logout', [$this, 'renderLogoutButton']);
         add_shortcode('ri_profilo', [$this, 'renderProfile']);
         add_shortcode('ri_login_form', [$this, 'renderLoginForm']);
         add_shortcode('ri_user_menu', [$this, 'renderUserMenu']);
+
+        // Shortcode che restituiscono solo l'URL: utili come href="" nei template
+        // YooTheme / Elementor / costruttori visuali che supportano gli shortcode.
+        add_shortcode('ri_login_url', [$this, 'renderLoginUrl']);
+        add_shortcode('ri_logout_url', [$this, 'renderLogoutUrl']);
+        add_shortcode('ri_account_url', [$this, 'renderAccountUrl']);
+
+        // Placeholder nei menu WP: #ri-login, #ri-logout, #ri-account
+        // Utili per configurare voci di menu dinamiche senza hard-code di URL che cambiano per ambiente.
+        add_filter('wp_nav_menu_objects', [$this, 'rewriteMenuPlaceholders'], 10, 2);
 
         // Non aggiungere il pulsante OIDC al form wp-login.php:
         // gli utenti Identity non sono amministratori WordPress.
@@ -126,6 +136,37 @@ class Frontend {
     }
 
     /**
+     * Shortcode [ri_login_url] — restituisce SOLO l'URL di login OIDC.
+     * Pensato per href="..." in template visuali (YooTheme, Elementor, Divi, ecc.).
+     */
+    public function renderLoginUrl($atts): string {
+        return esc_url($this->oidc->getAuthorizationUrl());
+    }
+
+    /**
+     * Shortcode [ri_logout_url] — restituisce SOLO l'URL di logout federato.
+     */
+    public function renderLogoutUrl($atts): string {
+        return esc_url(admin_url('admin-ajax.php?action=ri_logout'));
+    }
+
+    /**
+     * Shortcode [ri_account_url] — restituisce SOLO l'URL della pagina profilo
+     * sul server Identity, già con returnUrl verso il sito corrente.
+     *
+     * Attributi opzionali:
+     *   return_to: URL personalizzato a cui tornare (default: home_url('/')).
+     */
+    public function renderAccountUrl($atts): string {
+        $atts = shortcode_atts([
+            'return_to' => '',
+        ], $atts);
+
+        $return_to = !empty($atts['return_to']) ? $atts['return_to'] : null;
+        return esc_url($this->settings->getIdentityAccountUrl($return_to));
+    }
+
+    /**
      * Shortcode [ri_login_form] — form di login completo con pulsante OIDC.
      */
     public function renderLoginForm($atts): string {
@@ -134,7 +175,7 @@ class Frontend {
             return sprintf(
                 '<div class="ri-logged-in"><p>Benvenuto, <strong>%s</strong>!</p><p><a href="%s">Vai al profilo</a> | <a href="%s">Esci</a></p></div>',
                 esc_html($user->display_name),
-                esc_url($this->settings->get('login_redirect', home_url('/profilo/'))),
+                esc_url($this->settings->getIdentityAccountUrl()),
                 esc_url(admin_url('admin-ajax.php?action=ri_logout'))
             );
         }
@@ -197,7 +238,9 @@ class Frontend {
     public function renderUserMenu($atts): string {
         $atts = shortcode_atts([
             'login_text'   => $this->settings->get('login_button_text', 'Accedi'),
-            'profile_url'  => $this->settings->get('login_redirect', home_url('/profilo/')),
+            // Se profile_url non è passato, puntiamo di default alla pagina profilo su Identity.
+            // Per usare una pagina locale: [ri_user_menu profile_url="/pagina-locale/"]
+            'profile_url'  => $this->settings->getIdentityAccountUrl(),
             'show_avatar'  => 'true',
         ], $atts);
 
@@ -241,6 +284,54 @@ class Frontend {
             $orders_link,
             $logout_url
         );
+    }
+
+    /**
+     * Riscrive gli URL dei menu WordPress sostituendo i placeholder:
+     *   #ri-login   → URL di login OIDC (nasconde la voce se utente già loggato)
+     *   #ri-logout  → URL di logout federato (nasconde la voce se utente non loggato)
+     *   #ri-account → URL della pagina profilo su Identity (nasconde se non loggato)
+     *
+     * Così l'admin inserisce voci statiche nei menu WP e il plugin gestisce
+     * visibilità e risoluzione degli URL in runtime.
+     */
+    public function rewriteMenuPlaceholders(array $items, $args): array {
+        $logged_in = is_user_logged_in();
+
+        foreach ($items as $key => $item) {
+            if (empty($item->url)) {
+                continue;
+            }
+
+            switch ($item->url) {
+                case '#ri-login':
+                    if ($logged_in) {
+                        unset($items[$key]);
+                    } else {
+                        $item->url = $this->oidc->getAuthorizationUrl();
+                    }
+                    break;
+
+                case '#ri-logout':
+                    if (!$logged_in) {
+                        unset($items[$key]);
+                    } else {
+                        $item->url = admin_url('admin-ajax.php?action=ri_logout');
+                    }
+                    break;
+
+                case '#ri-account':
+                    if (!$logged_in) {
+                        unset($items[$key]);
+                    } else {
+                        $item->url = $this->settings->getIdentityAccountUrl();
+                    }
+                    break;
+            }
+        }
+
+        // Re-indicizza l'array dopo le unset() per evitare buchi nelle chiavi
+        return array_values($items);
     }
 
     // =========================================================================
@@ -341,7 +432,9 @@ class Frontend {
 
         if (is_user_logged_in()) {
             $user = wp_get_current_user();
-            $profile_url = esc_url($this->settings->get('login_redirect', home_url('/profilo/')));
+            // Il link "Il mio profilo" punta alla pagina Manage su Identity, con
+            // returnUrl pre-impostato al sito corrente.
+            $profile_url = esc_url($this->settings->getIdentityAccountUrl());
             $logout_url = esc_url(admin_url('admin-ajax.php?action=ri_logout'));
 
             $items .= sprintf(

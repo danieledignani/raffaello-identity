@@ -123,3 +123,28 @@ function ri_verify_nonce(string $nonce): bool {
     unset($_SESSION['ri_oidc_nonce']);
     return $valid;
 }
+
+/**
+ * URL della pagina profilo sul server Identity, con returnUrl verso il sito corrente.
+ * Usabile in template, widget e menu personalizzati.
+ */
+function ri_account_url(?string $return_to = null): string {
+    $settings = new \RaffaelloIdentity\Settings();
+    return $settings->getIdentityAccountUrl($return_to);
+}
+
+/**
+ * URL di logout federato (passa dal server Identity per chiudere la sessione SSO).
+ */
+function ri_logout_url(): string {
+    return admin_url('admin-ajax.php?action=ri_logout');
+}
+
+/**
+ * URL di login OIDC (inizio dell'Authorization Code Flow).
+ */
+function ri_login_url(): string {
+    $settings = new \RaffaelloIdentity\Settings();
+    $oidc = new \RaffaelloIdentity\OidcClient($settings);
+    return $oidc->getAuthorizationUrl();
+}
