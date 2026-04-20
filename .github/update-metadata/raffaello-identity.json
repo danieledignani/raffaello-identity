@@ -6,13 +6,13 @@
   "requires": "5.8",
   "tested": "6.5",
   "requires_php": "7.4",
-  "last_updated": "2026-04-20 12:00:00",
+  "last_updated": "2026-04-20 14:47:00",
   "upgrade_notice": "Aggiornamento automatico da GitHub",
   "author": "Gruppo Raffaello",
   "author_homepage": "https://github.com/danieledignani",
   "sections": {
     "description": "Integrazione OIDC con GruppoRaffaello.Identity — login, profilo utente, ruoli e scope/claim configurabili.",
     "installation": "Carica il plugin tramite il pannello 'Plugin > Aggiungi nuovo' o scompatta nella cartella wp-content/plugins/",
-    "changelog": "<h4>1.5.0</h4>\n<ul>\n<li>Aggiunti shortcode URL-only: [ri_login_url], [ri_logout_url], [ri_account_url] per usi in template visuali (YooTheme, Elementor).</li>\n<li>Aggiunti helper PHP: ri_account_url(), ri_login_url(), ri_logout_url().</li>\n<li>Nuovi placeholder per menu WP: #ri-login, #ri-logout, #ri-account — risolti automaticamente in base allo stato di login.</li>\n<li>Il link 'Il mio profilo' ora punta di default alla pagina Manage del server Identity, con returnUrl al sito corrente.</li>\n</ul>\n<h4>1.4.0</h4>\n<ul>\n<li>Gestione ruolo 'sostegno' e mapping claim.</li>\n</ul>"
+    "changelog": "<li>imporeved logout</li>\n<li>Update JSON to version 1.4.0</li>"
   }
 }
