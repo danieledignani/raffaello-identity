@@ -434,3 +434,14 @@
 .ri-wc-register-override p {
     margin: 10px 0;
 }
+
+/* Nasconde voci di menu segnate come placeholder non applicabili allo stato
+   di login corrente (es. #ri-logout per utenti anonimi, #ri-login per utenti
+   loggati). Usato dal fallback nav_menu_link_attributes quando il walker del
+   tema non fa scattare wp_nav_menu_objects (YooTheme Navbar, ecc.). */
+a.ri-menu-hide,
+li:has(> a.ri-menu-hide),
+.uk-parent:has(> a.ri-menu-hide),
+.menu-item:has(> a.ri-menu-hide) {
+    display: none !important;
+}

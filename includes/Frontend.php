@@ -38,6 +38,13 @@ class Frontend {
         // Utili per configurare voci di menu dinamiche senza hard-code di URL che cambiano per ambiente.
         add_filter('wp_nav_menu_objects', [$this, 'rewriteMenuPlaceholders'], 10, 2);
 
+        // Hook di backup per walker custom (es. YooTheme Navbar) che non invocano
+        // il filtro wp_nav_menu_objects ma comunque chiamano nav_menu_link_attributes
+        // per ogni link renderizzato. Sostituisce solo l'href; per nascondere una
+        // voce non valida (es. #ri-logout quando utente non loggato) aggiunge la
+        // classe CSS "ri-menu-hide" gestita dal CSS del plugin.
+        add_filter('nav_menu_link_attributes', [$this, 'rewriteMenuLinkAttributes'], 10, 4);
+
         // Non aggiungere il pulsante OIDC al form wp-login.php:
         // gli utenti Identity non sono amministratori WordPress.
 
@@ -332,6 +339,64 @@ class Frontend {
 
         // Re-indicizza l'array dopo le unset() per evitare buchi nelle chiavi
         return array_values($items);
+    }
+
+    /**
+     * Fallback per walker custom (YooTheme Navbar, Elementor, Oxygen, ecc.) che
+     * renderizzano i menu senza far scattare wp_nav_menu_objects. Sostituisce
+     * solo l'href; non può rimuovere la voce dal DOM, quindi aggiunge la classe
+     * CSS "ri-menu-hide" su voci che non devono essere visibili nello stato
+     * di login corrente (es. #ri-logout per utenti anonimi).
+     *
+     * @param array $atts Attributi HTML del link (href, class, title, target, rel)
+     * @param object $item Oggetto menu item
+     * @param object $args Argomenti di wp_nav_menu
+     * @param int $depth Livello del menu
+     */
+    public function rewriteMenuLinkAttributes(array $atts, $item, $args, $depth): array {
+        if (empty($atts['href'])) {
+            return $atts;
+        }
+
+        $logged_in = is_user_logged_in();
+        $hide = false;
+
+        switch ($atts['href']) {
+            case '#ri-login':
+                if ($logged_in) {
+                    $hide = true;
+                } else {
+                    $atts['href'] = $this->oidc->getAuthorizationUrl();
+                }
+                break;
+
+            case '#ri-logout':
+                if (!$logged_in) {
+                    $hide = true;
+                } else {
+                    $atts['href'] = admin_url('admin-ajax.php?action=ri_logout');
+                }
+                break;
+
+            case '#ri-account':
+                if (!$logged_in) {
+                    $hide = true;
+                } else {
+                    $atts['href'] = $this->settings->getIdentityAccountUrl();
+                }
+                break;
+
+            default:
+                return $atts;
+        }
+
+        if ($hide) {
+            $atts['class'] = trim(($atts['class'] ?? '') . ' ri-menu-hide');
+            $atts['aria-hidden'] = 'true';
+            $atts['tabindex'] = '-1';
+        }
+
+        return $atts;
     }
 
     // =========================================================================
