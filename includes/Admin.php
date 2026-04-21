@@ -69,6 +69,7 @@ class Admin {
             'test'     => 'Test Connessione',
             'log'      => 'Log',
             'debug'    => 'Debug',
+            'server'   => 'Requisiti Server',
         ];
 
         echo '<div class="wrap ri-admin-wrap">';
@@ -94,6 +95,9 @@ class Admin {
                 break;
             case 'debug':
                 $this->renderDebugTab();
+                break;
+            case 'server':
+                $this->renderServerSetupTab();
                 break;
             default:
                 $this->renderSettingsTab();
@@ -631,5 +635,99 @@ class Admin {
                 : 'Alcuni controlli hanno rilevato problemi.',
             'checks'  => $checks,
         ];
+    }
+
+    // =========================================================================
+    // Tab: Requisiti Server
+    // =========================================================================
+
+    /**
+     * Mostra la configurazione nginx richiesta per il funzionamento del logout OIDC.
+     *
+     * Il logout federato costruisce un URL verso l'end_session endpoint includendo
+     * "id_token_hint" con il JWT completo dell'utente (2-5KB). La Location header
+     * risultante supera facilmente i buffer di default di nginx (4/8KB), generando
+     * errori "upstream sent too big header" e risposte 502 Bad Gateway.
+     * Le direttive proposte qui alzano i buffer FastCGI e proxy a valori sicuri.
+     */
+    private function renderServerSetupTab(): void {
+        $nginx_config = <<<'NGINX'
+# Raffaello Identity — buffer grandi per il logout OIDC.
+# Il Location header del redirect al /connect/logout contiene
+# l'id_token_hint (JWT 2-5KB) che eccede i default nginx (4/8KB).
+fastcgi_buffer_size 32k;
+fastcgi_buffers 8 32k;
+fastcgi_busy_buffers_size 64k;
+proxy_buffer_size 32k;
+proxy_buffers 8 32k;
+proxy_busy_buffers_size 64k;
+NGINX;
+
+        ?>
+        <div class="ri-server-setup">
+            <h2>Configurazione nginx per il logout OIDC</h2>
+
+            <div class="notice notice-warning inline" style="margin: 12px 0;">
+                <p>
+                    <strong>Se vedi errori 502 Bad Gateway al logout</strong> (su <code>/wp-admin/admin-ajax.php?action=ri_logout</code>),
+                    molto probabilmente i buffer di nginx sono troppo piccoli per
+                    gestire la Location header del redirect all'Identity Server.
+                </p>
+            </div>
+
+            <h3>Causa</h3>
+            <p>
+                Il logout federato chiama l'endpoint <code>/connect/logout</code> dell'Identity Server
+                passando <code>id_token_hint</code> con il JWT completo dell'utente (2-5&nbsp;KB) e
+                <code>post_logout_redirect_uri</code>. L'URL completo finisce nella <code>Location</code>
+                header del redirect e supera i buffer di default di nginx (4/8&nbsp;KB),
+                generando l'errore <code>upstream sent too big header while reading response header from upstream</code>
+                e un 502 Bad Gateway.
+            </p>
+
+            <h3>Soluzione — direttive nginx</h3>
+            <p>Aggiungi queste direttive alla configurazione nginx del vhost:</p>
+
+            <div class="ri-code-block">
+                <textarea readonly rows="9" style="width: 100%; font-family: monospace; font-size: 12px; background: #f6f7f7; padding: 12px;"><?php echo esc_textarea($nginx_config); ?></textarea>
+                <p>
+                    <button type="button" class="button" onclick="navigator.clipboard.writeText(this.previousElementSibling.previousElementSibling.value).then(() => { this.textContent = '✓ Copiato'; setTimeout(() => this.textContent = 'Copia negli appunti', 2000); })">
+                        Copia negli appunti
+                    </button>
+                </p>
+            </div>
+
+            <h3>Dove inserirle</h3>
+            <h4>Plesk</h4>
+            <ol>
+                <li>Plesk → Websites &amp; Domains → tuo dominio</li>
+                <li><strong>Apache &amp; nginx Settings</strong></li>
+                <li>Scroll fino a <strong>Additional nginx directives</strong></li>
+                <li>Incolla il blocco qui sopra e salva (Plesk ricarica nginx automaticamente)</li>
+            </ol>
+
+            <h4>nginx diretto</h4>
+            <ol>
+                <li>Modifica il file del vhost (es. <code>/etc/nginx/sites-available/tuo-dominio.conf</code>)</li>
+                <li>Aggiungi le direttive nel blocco <code>server { ... }</code> o dentro il <code>location</code> che gestisce PHP</li>
+                <li>Verifica e ricarica: <code>nginx -t &amp;&amp; systemctl reload nginx</code></li>
+            </ol>
+
+            <h3>Verifica</h3>
+            <p>Dopo il reload:</p>
+            <ol>
+                <li>Fai login, vai alla tua pagina account, clicca "Esci"</li>
+                <li>Il logout deve completare senza errore 502</li>
+                <li>In <code>/var/log/nginx/error.log</code> non deve più comparire <code>upstream sent too big header</code></li>
+            </ol>
+        </div>
+
+        <style>
+            .ri-server-setup h3 { margin-top: 24px; }
+            .ri-server-setup h4 { margin-bottom: 4px; }
+            .ri-server-setup ol { margin-left: 20px; }
+            .ri-code-block { margin: 12px 0; }
+        </style>
+        <?php
     }
 }
