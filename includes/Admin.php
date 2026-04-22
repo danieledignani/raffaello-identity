@@ -146,6 +146,11 @@ class Admin {
         $options['login_button_text'] = sanitize_text_field($_POST['ri_login_button_text'] ?? '');
         $options['override_wp_login'] = isset($_POST['ri_override_wp_login']);
 
+        // Campo per display name utente (shortcode [ri_user_name], placeholder {ri_name})
+        $allowed_display_fields = ['display_name', 'first_name', 'last_name', 'full_name', 'username', 'email'];
+        $display_field = sanitize_text_field($_POST['ri_display_field'] ?? 'first_name');
+        $options['display_field'] = in_array($display_field, $allowed_display_fields, true) ? $display_field : 'first_name';
+
         // WooCommerce
         $options['wc_override_login'] = isset($_POST['ri_wc_override_login']);
 

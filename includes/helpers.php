@@ -35,6 +35,10 @@ function ri_get_options(): array {
         'wc_override_login' => true,
         'nav_menu_location' => '',
         'debug_mode'        => false,
+        // Campo utente da usare per il display name pubblico (shortcode [ri_user_name]
+        // e placeholder {ri_name} nei menu). Valori: 'display_name', 'first_name',
+        // 'last_name', 'full_name', 'username', 'email'.
+        'display_field'     => 'first_name',
     ];
 
     $saved = get_option('ri_options', []);
@@ -147,4 +151,50 @@ function ri_login_url(): string {
     $settings = new \RaffaelloIdentity\Settings();
     $oidc = new \RaffaelloIdentity\OidcClient($settings);
     return $oidc->getAuthorizationUrl();
+}
+
+/**
+ * Restituisce il nome utente da mostrare in UI, in base al campo scelto
+ * nelle impostazioni del plugin (display_field). Se l'utente non è loggato
+ * o il campo è vuoto, ritorna stringa vuota.
+ *
+ * Campi supportati: 'display_name' (default WP), 'first_name', 'last_name',
+ * 'full_name' (nome + cognome), 'username' (user_login), 'email'.
+ *
+ * Utile per shortcode [ri_user_name], placeholder {ri_name} nei menu,
+ * e per integrazioni custom in theme template.
+ */
+function ri_user_display_name(?string $field_override = null): string {
+    if (!is_user_logged_in()) {
+        return '';
+    }
+
+    $user = wp_get_current_user();
+    if (!empty($field_override)) {
+        $field = $field_override;
+    } else {
+        $options = ri_get_options();
+        $field = $options['display_field'] ?? 'first_name';
+    }
+
+    switch ($field) {
+        case 'username':
+            return (string) $user->user_login;
+        case 'email':
+            return (string) $user->user_email;
+        case 'first_name':
+            $first = (string) get_user_meta($user->ID, 'first_name', true);
+            return $first !== '' ? $first : (string) $user->display_name;
+        case 'last_name':
+            $last = (string) get_user_meta($user->ID, 'last_name', true);
+            return $last !== '' ? $last : (string) $user->display_name;
+        case 'full_name':
+            $first = trim((string) get_user_meta($user->ID, 'first_name', true));
+            $last  = trim((string) get_user_meta($user->ID, 'last_name', true));
+            $full  = trim("$first $last");
+            return $full !== '' ? $full : (string) $user->display_name;
+        case 'display_name':
+        default:
+            return (string) $user->display_name;
+    }
 }

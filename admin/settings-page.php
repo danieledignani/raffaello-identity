@@ -146,6 +146,25 @@ function ri_locked_notice(string $option_key, array $ri_constants): void {
                     </td>
                 </tr>
                 <tr>
+                    <th><label for="ri_display_field">Nome utente mostrato</label></th>
+                    <td>
+                        <?php $current_field = $opts['display_field'] ?? 'first_name'; ?>
+                        <select id="ri_display_field" name="ri_display_field">
+                            <option value="first_name" <?php selected($current_field, 'first_name'); ?>>Nome (first_name)</option>
+                            <option value="last_name" <?php selected($current_field, 'last_name'); ?>>Cognome (last_name)</option>
+                            <option value="full_name" <?php selected($current_field, 'full_name'); ?>>Nome e cognome (full_name)</option>
+                            <option value="display_name" <?php selected($current_field, 'display_name'); ?>>Display name (WP)</option>
+                            <option value="username" <?php selected($current_field, 'username'); ?>>Username (user_login)</option>
+                            <option value="email" <?php selected($current_field, 'email'); ?>>Email</option>
+                        </select>
+                        <p class="description">
+                            Campo usato per lo shortcode <code>[ri_user_name]</code>, la funzione PHP
+                            <code>ri_user_display_name()</code> e il placeholder <code>{ri_name}</code>
+                            nei menu (es. label voce menu: <em>Ciao {ri_name}!</em>).
+                        </p>
+                    </td>
+                </tr>
+                <tr>
                     <th>Override login WP</th>
                     <td>
                         <label>

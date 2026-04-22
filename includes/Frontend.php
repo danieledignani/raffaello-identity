@@ -34,6 +34,9 @@ class Frontend {
         add_shortcode('ri_logout_url', [$this, 'renderLogoutUrl']);
         add_shortcode('ri_account_url', [$this, 'renderAccountUrl']);
 
+        // Nome utente configurabile (campo scelto in Impostazioni)
+        add_shortcode('ri_user_name', [$this, 'renderUserName']);
+
         // Placeholder nei menu WP: #ri-login, #ri-logout, #ri-account
         // Utili per configurare voci di menu dinamiche senza hard-code di URL che cambiano per ambiente.
         add_filter('wp_nav_menu_objects', [$this, 'rewriteMenuPlaceholders'], 10, 2);
@@ -44,6 +47,11 @@ class Frontend {
         // voce non valida (es. #ri-logout quando utente non loggato) aggiunge la
         // classe CSS "ri-menu-hide" gestita dal CSS del plugin.
         add_filter('nav_menu_link_attributes', [$this, 'rewriteMenuLinkAttributes'], 10, 4);
+
+        // Placeholder {ri_name} nelle LABEL dei menu: sostituito dal nome utente
+        // secondo display_field. Opera sia via wp_nav_menu_objects (per title)
+        // sia via walker_nav_menu_start_el (per HTML completo, fallback YooTheme).
+        add_filter('walker_nav_menu_start_el', [$this, 'rewriteMenuItemHtml'], 10, 4);
 
         // Non aggiungere il pulsante OIDC al form wp-login.php:
         // gli utenti Identity non sono amministratori WordPress.
@@ -155,6 +163,29 @@ class Frontend {
      */
     public function renderLogoutUrl($atts): string {
         return esc_url(admin_url('admin-ajax.php?action=ri_logout'));
+    }
+
+    /**
+     * Shortcode [ri_user_name] — restituisce il nome utente secondo
+     * il campo display_field configurato in Impostazioni.
+     *
+     * Attributi opzionali:
+     *   field: sovrascrive il campo impostato (display_name|first_name|
+     *          last_name|full_name|username|email).
+     *   fallback: testo mostrato se l'utente non è loggato (default: vuoto).
+     */
+    public function renderUserName($atts): string {
+        $atts = shortcode_atts([
+            'field'    => '',
+            'fallback' => '',
+        ], $atts);
+
+        if (!is_user_logged_in()) {
+            return esc_html($atts['fallback']);
+        }
+
+        $field_override = !empty($atts['field']) ? $atts['field'] : null;
+        return esc_html(ri_user_display_name($field_override));
     }
 
     /**
@@ -304,8 +335,15 @@ class Frontend {
      */
     public function rewriteMenuPlaceholders(array $items, $args): array {
         $logged_in = is_user_logged_in();
+        $user_name = $logged_in ? ri_user_display_name() : '';
 
         foreach ($items as $key => $item) {
+            // Sostituisce {ri_name} nella label del menu con il nome utente.
+            // Utile per voci tipo "Ciao {ri_name}!" o "Il tuo profilo, {ri_name}".
+            if (!empty($item->title) && strpos($item->title, '{ri_name}') !== false) {
+                $item->title = str_replace('{ri_name}', $user_name, $item->title);
+            }
+
             if (empty($item->url)) {
                 continue;
             }
@@ -397,6 +435,25 @@ class Frontend {
         }
 
         return $atts;
+    }
+
+    /**
+     * Fallback per walker custom: sostituisce {ri_name} nell'HTML renderizzato
+     * del menu item. Scatta anche quando wp_nav_menu_objects non fa la
+     * sostituzione in $item->title (es. YooTheme Navbar).
+     *
+     * @param string $item_output HTML renderizzato della voce di menu
+     * @param object $item Oggetto menu item
+     * @param int $depth Profondità della voce
+     * @param object $args Argomenti di wp_nav_menu
+     */
+    public function rewriteMenuItemHtml(string $item_output, $item, int $depth, $args): string {
+        if (strpos($item_output, '{ri_name}') === false) {
+            return $item_output;
+        }
+
+        $user_name = is_user_logged_in() ? ri_user_display_name() : '';
+        return str_replace('{ri_name}', esc_html($user_name), $item_output);
     }
 
     // =========================================================================
