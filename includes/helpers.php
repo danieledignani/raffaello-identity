@@ -39,6 +39,11 @@ function ri_get_options(): array {
         // e placeholder {ri_name} nei menu). Valori: 'display_name', 'first_name',
         // 'last_name', 'full_name', 'username', 'email'.
         'display_field'     => 'first_name',
+        // Etichette del menu #ri-user (voce unica state-aware).
+        // Supportano HTML per icone (es. Bootstrap <i class="bi bi-person"></i>)
+        // e il placeholder {name} che viene sostituito dal display name.
+        'menu_label_in'     => 'Ciao {name}!',
+        'menu_label_out'    => 'Accedi',
     ];
 
     $saved = get_option('ri_options', []);

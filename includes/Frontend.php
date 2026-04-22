@@ -336,10 +336,11 @@ class Frontend {
     public function rewriteMenuPlaceholders(array $items, $args): array {
         $logged_in = is_user_logged_in();
         $user_name = $logged_in ? ri_user_display_name() : '';
+        $options   = ri_get_options();
 
         foreach ($items as $key => $item) {
             // Sostituisce {ri_name} nella label del menu con il nome utente.
-            // Utile per voci tipo "Ciao {ri_name}!" o "Il tuo profilo, {ri_name}".
+            // Retrocompatibilità con configurazioni precedenti al placeholder #ri-user.
             if (!empty($item->title) && strpos($item->title, '{ri_name}') !== false) {
                 $item->title = str_replace('{ri_name}', $user_name, $item->title);
             }
@@ -370,6 +371,20 @@ class Frontend {
                         unset($items[$key]);
                     } else {
                         $item->url = $this->settings->getIdentityAccountUrl();
+                    }
+                    break;
+
+                // Voce state-aware: visibile sia loggato che non, cambia URL e label.
+                // Loggato: vai al profilo Identity, label = "menu_label_in".
+                // Non loggato: vai al login OIDC, label = "menu_label_out".
+                case '#ri-user':
+                    if ($logged_in) {
+                        $item->url = $this->settings->getIdentityAccountUrl();
+                        $label = (string) ($options['menu_label_in'] ?? 'Ciao {name}!');
+                        $item->title = str_replace('{name}', $user_name, $label);
+                    } else {
+                        $item->url = $this->oidc->getAuthorizationUrl();
+                        $item->title = (string) ($options['menu_label_out'] ?? 'Accedi');
                     }
                     break;
             }
@@ -424,6 +439,13 @@ class Frontend {
                 }
                 break;
 
+            case '#ri-user':
+                $atts['href'] = $logged_in
+                    ? $this->settings->getIdentityAccountUrl()
+                    : $this->oidc->getAuthorizationUrl();
+                // Non nascondiamo: la voce è state-aware, visibile sempre.
+                break;
+
             default:
                 return $atts;
         }
@@ -448,12 +470,37 @@ class Frontend {
      * @param object $args Argomenti di wp_nav_menu
      */
     public function rewriteMenuItemHtml(string $item_output, $item, int $depth, $args): string {
-        if (strpos($item_output, '{ri_name}') === false) {
-            return $item_output;
+        // Sostituzione {ri_name} legacy
+        if (strpos($item_output, '{ri_name}') !== false) {
+            $user_name = is_user_logged_in() ? ri_user_display_name() : '';
+            $item_output = str_replace('{ri_name}', esc_html($user_name), $item_output);
         }
 
-        $user_name = is_user_logged_in() ? ri_user_display_name() : '';
-        return str_replace('{ri_name}', esc_html($user_name), $item_output);
+        // Sostituzione label per #ri-user: se il walker del tema non ha onorato
+        // la modifica di $item->title fatta in wp_nav_menu_objects, intercettiamo
+        // l'HTML renderizzato e sostituiamo il testo del link.
+        if (!empty($item->url) && $item->url === '#ri-user') {
+            $options = ri_get_options();
+            if (is_user_logged_in()) {
+                $user_name = ri_user_display_name();
+                $label = (string) ($options['menu_label_in'] ?? 'Ciao {name}!');
+                $label = str_replace('{name}', esc_html($user_name), $label);
+            } else {
+                $label = (string) ($options['menu_label_out'] ?? 'Accedi');
+            }
+
+            // Sostituisce il contenuto testuale del primo <a>...</a> con il label.
+            // Usiamo regex non greedy per fermarci al primo </a>. Il label può
+            // contenere HTML (icone ecc.) quindi non viene re-escapato qui.
+            $item_output = preg_replace(
+                '/(<a\b[^>]*>)(.*?)(<\/a>)/is',
+                '$1' . $label . '$3',
+                $item_output,
+                1
+            );
+        }
+
+        return $item_output;
     }
 
     // =========================================================================

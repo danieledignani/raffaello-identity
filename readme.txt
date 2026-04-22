@@ -4,7 +4,7 @@ Tags: oidc, openid-connect, identity, sso, login
 Requires at least: 5.8
 Tested up to: 6.5
 Requires PHP: 7.4
-Stable tag: 1.5.0
+Stable tag: 1.6.2
 License: GPLv2 or later
 
 Integrazione OIDC con GruppoRaffaello.Identity — login, profilo utente, ruoli e claim configurabili.
@@ -84,6 +84,14 @@ Esempio pagina login:
 * `ri_user_synced` (action) — Chiamato dopo la sincronizzazione dell'utente. Parametri: `$user_id`, `$userinfo`, `$tokens`
 
 == Changelog ==
+
+= 1.6.2 =
+* Nuovo placeholder menu state-aware `#ri-user`: una sola voce menu gestisce login/logout e profilo in base allo stato dell'utente
+* Etichette menu configurabili in Impostazioni (loggato / non loggato) con supporto HTML per icone e placeholder `{name}`
+* Campo display name configurabile (nome, cognome, nome+cognome, display_name, username, email)
+* Shortcode `[ri_user_name]` e helper PHP `ri_user_display_name()`
+* Hook fallback `nav_menu_link_attributes` e `walker_nav_menu_start_el` per compatibilità con walker custom (YooTheme Navbar e simili)
+* Nuova tab "Requisiti Server" con istruzioni nginx per prevenire 502 al logout OIDC
 
 = 1.5.0 =
 * Nuovi shortcode URL-only: `[ri_login_url]`, `[ri_logout_url]`, `[ri_account_url]`

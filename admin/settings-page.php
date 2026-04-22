@@ -159,8 +159,32 @@ function ri_locked_notice(string $option_key, array $ri_constants): void {
                         </select>
                         <p class="description">
                             Campo usato per lo shortcode <code>[ri_user_name]</code>, la funzione PHP
-                            <code>ri_user_display_name()</code> e il placeholder <code>{ri_name}</code>
-                            nei menu (es. label voce menu: <em>Ciao {ri_name}!</em>).
+                            <code>ri_user_display_name()</code> e il placeholder <code>{name}</code>
+                            nelle etichette di menu state-aware <code>#ri-user</code>.
+                        </p>
+                    </td>
+                </tr>
+                <tr>
+                    <th><label for="ri_menu_label_in">Etichetta menu — Loggato</label></th>
+                    <td>
+                        <input type="text" id="ri_menu_label_in" name="ri_menu_label_in" class="regular-text"
+                               value="<?php echo esc_attr($opts['menu_label_in'] ?? 'Ciao {name}!'); ?>">
+                        <p class="description">
+                            Etichetta mostrata nella voce di menu con URL <code>#ri-user</code> quando l'utente è loggato.
+                            Supporta HTML (icone Bootstrap/FontAwesome) e il placeholder <code>{name}</code>.<br>
+                            Esempi: <code>Ciao {name}!</code> — <code>&lt;i class="bi bi-person"&gt;&lt;/i&gt; {name}</code> — <code>👤 {name}</code>
+                        </p>
+                    </td>
+                </tr>
+                <tr>
+                    <th><label for="ri_menu_label_out">Etichetta menu — Non loggato</label></th>
+                    <td>
+                        <input type="text" id="ri_menu_label_out" name="ri_menu_label_out" class="regular-text"
+                               value="<?php echo esc_attr($opts['menu_label_out'] ?? 'Accedi'); ?>">
+                        <p class="description">
+                            Etichetta mostrata nella voce di menu con URL <code>#ri-user</code> quando l'utente NON è loggato.
+                            Supporta HTML per icone.<br>
+                            Esempi: <code>Accedi</code> — <code>&lt;i class="bi bi-box-arrow-in-right"&gt;&lt;/i&gt; Accedi</code>
                         </p>
                     </td>
                 </tr>
