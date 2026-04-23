@@ -25,6 +25,13 @@ class OidcClient {
         add_action('wp_ajax_ri_logout', [$this, 'handleLogout']);
         add_action('wp_ajax_nopriv_ri_logout', [$this, 'handleLogout']);
 
+        // Logout locale (senza federated). Usato quando l'utente clicca "Esci" dall'header
+        // di Identity: Identity fa sign-out locale e rimanda a questo endpoint che chiude
+        // solo la sessione WP e redirige a home (o al return_to passato). Evita il loop
+        // Identity→WP→Identity del logout federato quando l'utente è già sloggato da Identity.
+        add_action('wp_ajax_ri_local_logout', [$this, 'handleLocalLogout']);
+        add_action('wp_ajax_nopriv_ri_local_logout', [$this, 'handleLocalLogout']);
+
         // Token refresh automatico ad ogni page load per utenti loggati
         add_action('wp_loaded', [$this, 'ensureTokensFresh']);
 
@@ -591,6 +598,37 @@ class OidcClient {
         ]);
 
         wp_redirect($logout_url);
+        exit;
+    }
+
+    /**
+     * Logout solo-WordPress senza passare da /connect/logout di Identity.
+     *
+     * Usato quando l'utente clicca "Esci" direttamente sull'header Identity:
+     * Identity ha già chiuso la sua sessione e redirige qui per chiudere anche
+     * la sessione WP. Non richiamiamo end_session (lo farebbe in loop perché
+     * Identity ci rimanderebbe di nuovo qui come post_logout_redirect_uri).
+     *
+     * Parametro query opzionale "return_to" = URL locale WP dove atterrare dopo
+     * il logout. Default: home_url('/').
+     */
+    public function handleLocalLogout(): void {
+        $user_id = get_current_user_id();
+
+        Logger::info('local_logout', "Logout locale WP (richiesto da Identity) per utente #$user_id", [
+            'user_id' => $user_id,
+        ]);
+
+        wp_logout();
+
+        $return_to = isset($_GET['return_to']) ? esc_url_raw(wp_unslash($_GET['return_to'])) : '';
+
+        // Accetta solo URL dello stesso sito (anti open-redirect).
+        if (!empty($return_to) && wp_validate_redirect($return_to, '') !== '') {
+            wp_safe_redirect($return_to);
+        } else {
+            wp_safe_redirect(home_url('/'));
+        }
         exit;
     }
 
