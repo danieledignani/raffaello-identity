@@ -4,7 +4,7 @@ Tags: oidc, openid-connect, identity, sso, login
 Requires at least: 5.8
 Tested up to: 6.5
 Requires PHP: 7.4
-Stable tag: 1.6.3
+Stable tag: 1.6.4
 License: GPLv2 or later
 
 Integrazione OIDC con GruppoRaffaello.Identity — login, profilo utente, ruoli e claim configurabili.
@@ -84,6 +84,9 @@ Esempio pagina login:
 * `ri_user_synced` (action) — Chiamato dopo la sincronizzazione dell'utente. Parametri: `$user_id`, `$userinfo`, `$tokens`
 
 == Changelog ==
+
+= 1.6.4 =
+* Fix critico CSRF: memoizzazione dell'authorize URL per request. Con i nuovi hook introdotti in 1.6.2-1.6.3 `getAuthorizationUrl()` poteva essere chiamato più volte per pagina e rigenerava lo state in sessione ad ogni invocazione, provocando "Verifica state CSRF fallita" al callback.
 
 = 1.6.3 =
 * Nuovo endpoint `ri_local_logout`: sincronizza il logout WP quando l'utente clicca "Esci" dall'header Identity (senza loop con /connect/logout)

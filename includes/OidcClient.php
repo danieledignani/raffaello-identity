@@ -12,6 +12,19 @@ if (!defined('ABSPATH')) {
 class OidcClient {
     private Settings $settings;
 
+    /**
+     * Cache dell'URL di autorizzazione per la durata della request corrente.
+     * Serve per evitare che hook multipli (wp_nav_menu_objects, nav_menu_link_attributes,
+     * walker_nav_menu_start_el, shortcode) chiamino getAuthorizationUrl ciascuno e
+     * ri_generate_state() sovrascriva $_SESSION['ri_oidc_state'] ad ogni invocazione.
+     * Se così fosse, gli URL inseriti nell'HTML conterrebbero uno state "vecchio" mentre
+     * la session avrebbe solo l'ultimo, facendo fallire il check CSRF al callback.
+     *
+     * STATIC: più istanze di OidcClient (una da Frontend.php, altra da ri_login_url()
+     * helper in helpers.php) devono condividere lo stesso URL/state per request.
+     */
+    private static ?string $_authorizationUrlCache = null;
+
     public function __construct(Settings $settings) {
         $this->settings = $settings;
     }
@@ -45,8 +58,17 @@ class OidcClient {
 
     /**
      * Genera l'URL di login OIDC (redirect al server Identity).
+     *
+     * Memoizzato per request: ri_generate_state() sovrascrive $_SESSION['ri_oidc_state']
+     * ad ogni chiamata, quindi se il menu renderizza più volte la voce #ri-login / #ri-user
+     * (es. navbar + mobile dialog) dobbiamo riutilizzare lo stesso state, altrimenti
+     * gli URL nell'HTML avrebbero state "vecchi" e il callback fallirebbe con CSRF error.
      */
     public function getAuthorizationUrl(): string {
+        if (self::$_authorizationUrlCache !== null) {
+            return self::$_authorizationUrlCache;
+        }
+
         $state = ri_generate_state();
         $nonce = ri_generate_nonce();
 
@@ -68,6 +90,7 @@ class OidcClient {
             'issuer'       => $this->settings->getIssuer(),
         ]);
 
+        self::$_authorizationUrlCache = $url;
         return $url;
     }
 
