@@ -10,6 +10,22 @@ if (!defined('ABSPATH')) {
  * Client OIDC: gestisce Authorization Code Flow con il server Identity.
  */
 class OidcClient {
+    /**
+     * Ogni quanti secondi rivalidare la sessione forzando un refresh, anche se l'access
+     * token è ancora valido. Fa sì che un logout eseguito direttamente su Identity si
+     * propaghi a WordPress entro questo intervallo (il refresh su token revocato torna
+     * invalid_grant → logout WP).
+     */
+    private const SESSION_RECHECK_SECONDS = 300;
+
+    /** Backoff dopo un errore di refresh transitorio (Identity irraggiungibile): evita di
+     *  ritentare la chiamata bloccante ad ogni page load. */
+    private const REFRESH_RETRY_BACKOFF_SECONDS = 120;
+
+    /** Timeout (secondi) delle chiamate di refresh: basso per non saturare i worker PHP-FPM
+     *  se Identity è lento/irraggiungibile. */
+    private const REFRESH_TIMEOUT_SECONDS = 10;
+
     private Settings $settings;
 
     public function __construct(Settings $settings) {
@@ -610,6 +626,9 @@ class OidcClient {
         // Logout WordPress
         wp_logout();
 
+        // Cancella i token salvati (l'id_token è già stato letto sopra per l'id_token_hint).
+        $this->clearTokens($user_id);
+
         // Redirect al logout del server Identity
         $params = [
             'post_logout_redirect_uri' => $this->settings->get('logout_redirect', home_url('/')),
@@ -649,6 +668,7 @@ class OidcClient {
         ]);
 
         wp_logout();
+        $this->clearTokens($user_id);
 
         $return_to = isset($_GET['return_to']) ? esc_url_raw(wp_unslash($_GET['return_to'])) : '';
 
@@ -685,11 +705,38 @@ class OidcClient {
             $refresh_expires_at = time() + (int) $tokens['refresh_expires_in'];
             update_user_meta($user_id, 'ri_refresh_expires_at', $refresh_expires_at);
         }
+
+        // Prossima rivalidazione forzata della sessione (vedi ensureTokensFresh): garantisce
+        // che un logout su Identity si propaghi a WP entro SESSION_RECHECK_SECONDS.
+        update_user_meta($user_id, 'ri_next_check', time() + self::SESSION_RECHECK_SECONDS);
     }
 
     /**
-     * Controlla ad ogni page load se l'access token è scaduto e lo rinnova.
-     * Se il refresh token è scaduto, esegue il logout.
+     * Rimuove dai user_meta tutti i token OIDC e i marcatori di sessione.
+     * Chiamata ad ogni logout: evita che refresh/access/id token restino spendibili
+     * nel DB dopo che l'utente è uscito.
+     */
+    private function clearTokens(int $user_id): void {
+        delete_user_meta($user_id, 'ri_access_token');
+        delete_user_meta($user_id, 'ri_refresh_token');
+        delete_user_meta($user_id, 'ri_id_token');
+        delete_user_meta($user_id, 'ri_token_expires_at');
+        delete_user_meta($user_id, 'ri_refresh_expires_at');
+        delete_user_meta($user_id, 'ri_next_check');
+        delete_user_meta($user_id, 'ri_refresh_retry_after');
+        delete_transient('ri_refreshing_' . $user_id);
+    }
+
+    /**
+     * Ad ogni page load: se l'access token è scaduto lo rinnova; inoltre, anche con access
+     * token ancora valido, forza periodicamente (SESSION_RECHECK_SECONDS) un refresh per
+     * rivalidare la sessione lato Identity. Così un logout fatto direttamente su Identity —
+     * che revoca i token — si propaga a WordPress: il refresh torna invalid_grant e l'utente
+     * viene sloggato anche da WP.
+     *
+     * Distingue gli errori: invalid_grant (token revocato/scaduto) → logout forzato;
+     * errori di rete transitori (Identity down) → sessione mantenuta con backoff, per non
+     * sloggare l'utente per un blip e non bloccare ogni richiesta con chiamate lente.
      */
     public function ensureTokensFresh(): void {
         if (!is_user_logged_in()) {
@@ -704,37 +751,72 @@ class OidcClient {
             return;
         }
 
+        $now = time();
         $expires_at = (int) get_user_meta($user_id, 'ri_token_expires_at', true);
-        if (empty($expires_at) || time() < $expires_at) {
-            return; // Token ancora valido o nessuna scadenza salvata
+        $next_check = (int) get_user_meta($user_id, 'ri_next_check', true);
+
+        $access_expired = !empty($expires_at) && $now >= $expires_at;
+        $recheck_due    = !empty($next_check) && $now >= $next_check;
+
+        // Niente da fare: access token valido e non è ancora ora di rivalidare la sessione.
+        if (!$access_expired && !$recheck_due) {
+            return;
         }
 
-        // Access token scaduto — proviamo il refresh
+        // Backoff: dopo un errore transitorio non ritentiamo la chiamata bloccante
+        // ad ogni page load (eviterebbe di saturare i worker se Identity è lento).
+        $retry_after = (int) get_user_meta($user_id, 'ri_refresh_retry_after', true);
+        if (!empty($retry_after) && $now < $retry_after) {
+            return;
+        }
+
         $refresh_token = get_user_meta($user_id, 'ri_refresh_token', true);
         if (empty($refresh_token)) {
-            Logger::warning('auto_refresh_no_token', "Access token scaduto ma nessun refresh token per utente #$user_id — logout");
-            $this->forceLogout($user_id);
+            // Access token scaduto e nessun refresh token: sessione non rinnovabile.
+            if ($access_expired) {
+                Logger::warning('auto_refresh_no_token', "Access token scaduto ma nessun refresh token per utente #$user_id — logout");
+                do_action('ri_session_expired', $user_id);
+                $this->forceLogout($user_id);
+            }
             return;
         }
 
-        // Controlla se il refresh token stesso è scaduto
-        $refresh_expires_at = (int) get_user_meta($user_id, 'ri_refresh_expires_at', true);
-        if (!empty($refresh_expires_at) && time() >= $refresh_expires_at) {
-            Logger::warning('auto_refresh_expired', "Refresh token scaduto per utente #$user_id — logout");
-            do_action('ri_session_expired', $user_id);
-            $this->forceLogout($user_id);
+        // Lock per-utente: evita refresh concorrenti (pagina + admin-ajax + REST) che
+        // spenderebbero lo stesso refresh token e potrebbero far scattare la reuse detection
+        // di OpenIddict, revocando l'intera catena.
+        $lock_key = 'ri_refreshing_' . $user_id;
+        if (get_transient($lock_key)) {
             return;
         }
+        set_transient($lock_key, 1, 30);
 
-        // Esegui il refresh — se il server Identity è irraggiungibile,
-        // non forzare il logout: l'utente può continuare a navigare
-        // e il refresh verrà ritentato al prossimo page load.
-        $result = $this->refreshToken($user_id);
+        try {
+            $result = $this->refreshToken($user_id);
+        } finally {
+            delete_transient($lock_key);
+        }
+
         if (is_wp_error($result)) {
-            Logger::warning('auto_refresh_failed', "Refresh automatico fallito per utente #$user_id — sessione mantenuta, ritenterà al prossimo caricamento", [
+            if ($result->get_error_code() === 'invalid_grant') {
+                // Refresh token revocato/scaduto (tipicamente: logout su Identity).
+                Logger::info('session_revoked', "Refresh token non più valido per utente #$user_id (invalid_grant) — logout WP", [
+                    'user_id' => $user_id,
+                ]);
+                do_action('ri_session_expired', $user_id);
+                $this->forceLogout($user_id);
+                return;
+            }
+
+            // Errore transitorio (rete/Identity down): mantieni la sessione e applica backoff.
+            update_user_meta($user_id, 'ri_refresh_retry_after', $now + self::REFRESH_RETRY_BACKOFF_SECONDS);
+            Logger::warning('auto_refresh_failed', "Refresh automatico fallito per utente #$user_id — sessione mantenuta, riprova tra " . self::REFRESH_RETRY_BACKOFF_SECONDS . "s", [
                 'error' => $result->get_error_message(),
             ]);
+            return;
         }
+
+        // Successo: azzera l'eventuale backoff (saveTokens ha già aggiornato ri_next_check).
+        delete_user_meta($user_id, 'ri_refresh_retry_after');
     }
 
     /**
@@ -756,7 +838,7 @@ class OidcClient {
                 'client_id'     => $this->settings->get('client_id'),
                 'client_secret' => $this->settings->get('client_secret'),
             ],
-            'timeout' => 30,
+            'timeout' => self::REFRESH_TIMEOUT_SECONDS,
         ];
 
         /**
@@ -770,18 +852,31 @@ class OidcClient {
         $response = wp_remote_post($this->settings->getTokenEndpoint(), $request);
 
         if (is_wp_error($response)) {
+            // Errore di trasporto (timeout/DNS/connessione): transitorio, non è invalid_grant.
             Logger::error('refresh_http_error', 'Errore HTTP nel rinnovo token', [
                 'error_message' => $response->get_error_message(),
             ]);
             return $response;
         }
 
+        $status = wp_remote_retrieve_response_code($response);
         $body = json_decode(wp_remote_retrieve_body($response), true);
         if (empty($body['access_token'])) {
+            $error = $body['error'] ?? '';
+
             Logger::error('refresh_failed', 'Rinnovo token fallito', [
-                'http_status' => wp_remote_retrieve_response_code($response),
-                'error'       => $body['error'] ?? 'N/D',
+                'http_status' => $status,
+                'error'       => $error ?: 'N/D',
             ]);
+
+            // invalid_grant / invalid_token: il refresh token non è più valido — revocato
+            // (es. logout su Identity), scaduto o già usato. L'utente NON è più autorizzato:
+            // codice dedicato così ensureTokensFresh può forzare il logout WP. Ogni altro
+            // esito (5xx, risposta malformata) è trattato come transitorio.
+            if (in_array($error, ['invalid_grant', 'invalid_token'], true)) {
+                return new \WP_Error('invalid_grant', 'La sessione non è più valida.');
+            }
+
             return new \WP_Error('refresh_error', 'Impossibile rinnovare il token.');
         }
 
@@ -933,6 +1028,7 @@ class OidcClient {
      */
     private function forceLogout(int $user_id): void {
         wp_logout();
+        $this->clearTokens($user_id);
 
         $redirect = $this->settings->get('logout_redirect', home_url('/'));
 
