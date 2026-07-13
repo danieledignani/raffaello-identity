@@ -10,21 +10,11 @@ if (!defined('ABSPATH')) {
  * Client OIDC: gestisce Authorization Code Flow con il server Identity.
  */
 class OidcClient {
-    /**
-     * Ogni quanti secondi rivalidare la sessione forzando un refresh, anche se l'access
-     * token è ancora valido. Fa sì che un logout eseguito direttamente su Identity si
-     * propaghi a WordPress entro questo intervallo (il refresh su token revocato torna
-     * invalid_grant → logout WP).
-     */
-    private const SESSION_RECHECK_SECONDS = 300;
-
     /** Backoff dopo un errore di refresh transitorio (Identity irraggiungibile): evita di
-     *  ritentare la chiamata bloccante ad ogni page load. */
+     *  ritentare la chiamata bloccante ad ogni page load.
+     *  L'intervallo di ricontrollo sessione e il timeout di refresh sono invece configurabili
+     *  dalle impostazioni (Settings::getSessionRecheckSeconds/getRefreshTimeoutSeconds). */
     private const REFRESH_RETRY_BACKOFF_SECONDS = 120;
-
-    /** Timeout (secondi) delle chiamate di refresh: basso per non saturare i worker PHP-FPM
-     *  se Identity è lento/irraggiungibile. */
-    private const REFRESH_TIMEOUT_SECONDS = 10;
 
     private Settings $settings;
 
@@ -707,8 +697,8 @@ class OidcClient {
         }
 
         // Prossima rivalidazione forzata della sessione (vedi ensureTokensFresh): garantisce
-        // che un logout su Identity si propaghi a WP entro SESSION_RECHECK_SECONDS.
-        update_user_meta($user_id, 'ri_next_check', time() + self::SESSION_RECHECK_SECONDS);
+        // che un logout su Identity si propaghi a WP entro l'intervallo configurato.
+        update_user_meta($user_id, 'ri_next_check', time() + $this->settings->getSessionRecheckSeconds());
     }
 
     /**
@@ -729,7 +719,8 @@ class OidcClient {
 
     /**
      * Ad ogni page load: se l'access token è scaduto lo rinnova; inoltre, anche con access
-     * token ancora valido, forza periodicamente (SESSION_RECHECK_SECONDS) un refresh per
+     * token ancora valido, forza periodicamente (intervallo "Ricontrollo sessione" nelle
+     * impostazioni) un refresh per
      * rivalidare la sessione lato Identity. Così un logout fatto direttamente su Identity —
      * che revoca i token — si propaga a WordPress: il refresh torna invalid_grant e l'utente
      * viene sloggato anche da WP.
@@ -838,7 +829,7 @@ class OidcClient {
                 'client_id'     => $this->settings->get('client_id'),
                 'client_secret' => $this->settings->get('client_secret'),
             ],
-            'timeout' => self::REFRESH_TIMEOUT_SECONDS,
+            'timeout' => $this->settings->getRefreshTimeoutSeconds(),
         ];
 
         /**

@@ -29,6 +29,11 @@ function ri_get_options(): array {
         ],
         'extra_claims'      => 'profilo,sostegno,consensoMarketing,consensoProfilazione,consensoTerzeParti,joomla_sub',
         'auto_register'     => true,
+        // Sessione OIDC
+        // Ogni quanti secondi rivalidare la sessione forzando un refresh (propaga a WP il
+        // logout fatto su Identity). Timeout (s) delle chiamate di refresh.
+        'session_recheck_seconds' => 300,
+        'refresh_timeout_seconds' => 10,
         'profile_page_id'   => 0,
         'login_button_text' => 'Accedi con Raffaello',
         'override_wp_login' => false,

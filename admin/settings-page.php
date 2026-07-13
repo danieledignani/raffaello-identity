@@ -124,6 +124,38 @@ function ri_locked_notice(string $option_key, array $ri_constants): void {
             </table>
         </div>
 
+        <!-- Sessione -->
+        <div class="ri-section">
+            <h2>Sessione</h2>
+            <table class="form-table">
+                <tr>
+                    <th><label for="ri_session_recheck_seconds">Ricontrollo sessione</label></th>
+                    <td>
+                        <input type="number" id="ri_session_recheck_seconds" name="ri_session_recheck_seconds"
+                               class="small-text" min="30" max="86400" step="10"
+                               value="<?php echo esc_attr($opts['session_recheck_seconds'] ?? 300); ?>"> secondi
+                        <p class="description">
+                            Ogni quanto rivalidare la sessione con un refresh, anche se l'access token è ancora valido.
+                            È il tempo massimo entro cui un <strong>logout eseguito su Identity si propaga a WordPress</strong>.
+                            Valori bassi = logout più reattivo ma più richieste al server. Default: 300 (5 min). Min 30, max 86400.
+                        </p>
+                    </td>
+                </tr>
+                <tr>
+                    <th><label for="ri_refresh_timeout_seconds">Timeout refresh</label></th>
+                    <td>
+                        <input type="number" id="ri_refresh_timeout_seconds" name="ri_refresh_timeout_seconds"
+                               class="small-text" min="3" max="60" step="1"
+                               value="<?php echo esc_attr($opts['refresh_timeout_seconds'] ?? 10); ?>"> secondi
+                        <p class="description">
+                            Timeout delle chiamate di rinnovo token verso Identity. Tenerlo basso evita di saturare
+                            i worker PHP se Identity è lento o irraggiungibile. Default: 10. Min 3, max 60.
+                        </p>
+                    </td>
+                </tr>
+            </table>
+        </div>
+
         <!-- Registrazione e Login -->
         <div class="ri-section">
             <h2>Registrazione e Login</h2>

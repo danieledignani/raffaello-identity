@@ -141,6 +141,10 @@ class Admin {
         $options['login_redirect'] = esc_url_raw($_POST['ri_login_redirect'] ?? '');
         $options['logout_redirect'] = esc_url_raw($_POST['ri_logout_redirect'] ?? '');
 
+        // Sessione OIDC (clamp coerente con Settings::getSessionRecheckSeconds/getRefreshTimeoutSeconds)
+        $options['session_recheck_seconds'] = max(30, min(86400, (int) ($_POST['ri_session_recheck_seconds'] ?? 300)));
+        $options['refresh_timeout_seconds'] = max(3, min(60, (int) ($_POST['ri_refresh_timeout_seconds'] ?? 10)));
+
         // Registrazione e login
         $options['auto_register'] = isset($_POST['ri_auto_register']);
         $options['login_button_text'] = sanitize_text_field($_POST['ri_login_button_text'] ?? '');

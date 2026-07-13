@@ -90,6 +90,24 @@ class Settings {
         return $this->get('scopes', 'openid email profile offline_access roles');
     }
 
+    /**
+     * Intervallo (secondi) di rivalidazione forzata della sessione: entro questo tempo un
+     * logout eseguito su Identity si propaga a WordPress. Clampato a [30, 86400].
+     */
+    public function getSessionRecheckSeconds(): int {
+        $value = (int) $this->get('session_recheck_seconds', 300);
+        return max(30, min(86400, $value));
+    }
+
+    /**
+     * Timeout (secondi) delle chiamate di refresh token. Basso per non saturare i worker
+     * PHP-FPM se Identity è lento/irraggiungibile. Clampato a [3, 60].
+     */
+    public function getRefreshTimeoutSeconds(): int {
+        $value = (int) $this->get('refresh_timeout_seconds', 10);
+        return max(3, min(60, $value));
+    }
+
     public function getRoleMapping(): array {
         return $this->get('role_mapping', []);
     }
