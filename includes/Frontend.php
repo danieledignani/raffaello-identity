@@ -201,7 +201,7 @@ class Frontend {
         ], $atts);
 
         $return_to = !empty($atts['return_to']) ? $atts['return_to'] : null;
-        return esc_url($this->settings->getIdentityAccountUrl($return_to));
+        return esc_url($this->settings->getAccountUrl($return_to));
     }
 
     /**
@@ -213,7 +213,7 @@ class Frontend {
             return sprintf(
                 '<div class="ri-logged-in"><p>Benvenuto, <strong>%s</strong>!</p><p><a href="%s">Vai al profilo</a> | <a href="%s">Esci</a></p></div>',
                 esc_html($user->display_name),
-                esc_url($this->settings->getIdentityAccountUrl()),
+                esc_url($this->settings->getAccountUrl()),
                 esc_url(admin_url('admin-ajax.php?action=ri_logout'))
             );
         }
@@ -278,7 +278,7 @@ class Frontend {
             'login_text'   => $this->settings->get('login_button_text', 'Accedi'),
             // Se profile_url non è passato, puntiamo di default alla pagina profilo su Identity.
             // Per usare una pagina locale: [ri_user_menu profile_url="/pagina-locale/"]
-            'profile_url'  => $this->settings->getIdentityAccountUrl(),
+            'profile_url'  => $this->settings->getAccountUrl(),
             'show_avatar'  => 'true',
         ], $atts);
 
@@ -370,7 +370,7 @@ class Frontend {
                     if (!$logged_in) {
                         unset($items[$key]);
                     } else {
-                        $item->url = $this->settings->getIdentityAccountUrl();
+                        $item->url = $this->settings->getAccountUrl();
                     }
                     break;
 
@@ -379,7 +379,7 @@ class Frontend {
                 // Non loggato: vai al login OIDC, label = "menu_label_out".
                 case '#ri-user':
                     if ($logged_in) {
-                        $item->url = $this->settings->getIdentityAccountUrl();
+                        $item->url = $this->settings->getAccountUrl();
                         $label = (string) ($options['menu_label_in'] ?? 'Ciao {name}!');
                         $item->title = str_replace('{name}', $user_name, $label);
                     } else {
@@ -435,13 +435,13 @@ class Frontend {
                 if (!$logged_in) {
                     $hide = true;
                 } else {
-                    $atts['href'] = $this->settings->getIdentityAccountUrl();
+                    $atts['href'] = $this->settings->getAccountUrl();
                 }
                 break;
 
             case '#ri-user':
                 $atts['href'] = $logged_in
-                    ? $this->settings->getIdentityAccountUrl()
+                    ? $this->settings->getAccountUrl()
                     : $this->oidc->getAuthorizationUrl();
                 // Non nascondiamo: la voce è state-aware, visibile sempre.
                 break;
@@ -603,7 +603,7 @@ class Frontend {
             $user = wp_get_current_user();
             // Il link "Il mio profilo" punta alla pagina Manage su Identity, con
             // returnUrl pre-impostato al sito corrente.
-            $profile_url = esc_url($this->settings->getIdentityAccountUrl());
+            $profile_url = esc_url($this->settings->getAccountUrl());
             $logout_url = esc_url(admin_url('admin-ajax.php?action=ri_logout'));
 
             $items .= sprintf(

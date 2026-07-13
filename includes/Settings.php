@@ -86,6 +86,23 @@ class Settings {
         return admin_url('admin-ajax.php?action=ri_logout');
     }
 
+    /**
+     * URL "profilo" da usare nei menu/link: NON punta direttamente a Identity, ma a un
+     * endpoint WP (ri_account) che prima verifica in modo silenzioso (prompt=none) se la
+     * sessione Identity è ancora viva. Se non lo è, slogga l'utente da WP e lo manda al
+     * login, invece di reindirizzarlo a una pagina Identity che non lo riconosce (evita
+     * lo stato "loggato su WP ma sloggato su Identity, impossibile uscire").
+     *
+     * @param string|null $return_to URL locale WP a cui tornare dopo il profilo.
+     */
+    public function getAccountUrl(?string $return_to = null): string {
+        $url = admin_url('admin-ajax.php?action=ri_account');
+        if (!empty($return_to)) {
+            $url = add_query_arg('return_to', rawurlencode($return_to), $url);
+        }
+        return $url;
+    }
+
     public function getScopes(): string {
         return $this->get('scopes', 'openid email profile offline_access roles');
     }

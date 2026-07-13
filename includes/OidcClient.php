@@ -46,6 +46,12 @@ class OidcClient {
         add_action('wp_ajax_ri_local_logout', [$this, 'handleLocalLogout']);
         add_action('wp_ajax_nopriv_ri_local_logout', [$this, 'handleLocalLogout']);
 
+        // Entrypoint "profilo": verifica silenziosa (prompt=none) della sessione Identity
+        // prima di reindirizzare al profilo. Se Identity non riconosce più l'utente, slogga
+        // WP e manda al login — evita lo stato bloccato "WP loggato / Identity sloggato".
+        add_action('wp_ajax_ri_account', [$this, 'handleAccountRedirect']);
+        add_action('wp_ajax_nopriv_ri_account', [$this, 'handleAccountRedirect']);
+
         // Token refresh automatico ad ogni page load per utenti loggati
         add_action('wp_loaded', [$this, 'ensureTokensFresh']);
 
@@ -107,9 +113,132 @@ class OidcClient {
     }
 
     /**
+     * Entrypoint "profilo": prima di mandare l'utente alla pagina profilo su Identity,
+     * verifica in modo silenzioso (prompt=none) che la sessione Identity sia ancora attiva.
+     *
+     * - Utente non loggato su WP → login.
+     * - Utente non OIDC → profilo WP standard.
+     * - Utente OIDC → redirect a /connect/authorize con prompt=none: Identity NON mostra
+     *   alcuna UI, risponde con un code se la sessione è viva o con error=login_required se
+     *   l'utente si è sloggato da Identity. La risposta torna al callback normale, che grazie
+     *   al flag di sessione 'ri_oidc_intent' viene dirottata su handleAccountCheckCallback.
+     */
+    public function handleAccountRedirect(): void {
+        $user_id = get_current_user_id();
+
+        if (!$user_id) {
+            wp_redirect($this->getAuthorizationUrl());
+            exit;
+        }
+
+        $sub = get_user_meta($user_id, 'ri_oidc_sub', true);
+        if (empty($sub)) {
+            // Non è un utente OIDC: mandiamo al profilo WP standard.
+            wp_safe_redirect(admin_url('profile.php'));
+            exit;
+        }
+
+        // Memorizza dove tornare (URL locale WP) dopo l'eventuale logout.
+        if (session_status() === PHP_SESSION_NONE && !headers_sent()) {
+            session_start();
+        }
+        $return_to = isset($_GET['return_to']) ? esc_url_raw(wp_unslash($_GET['return_to'])) : home_url('/');
+        $_SESSION['ri_oidc_intent'] = 'account';
+        $_SESSION['ri_oidc_account_return'] = $return_to;
+
+        $state = ri_generate_state();
+        $nonce = ri_generate_nonce();
+
+        $params = [
+            'response_type' => 'code',
+            'client_id'     => $this->settings->get('client_id'),
+            'redirect_uri'  => $this->settings->getCallbackUrl(),
+            'scope'         => $this->settings->getScopes(),
+            'state'         => $state,
+            'nonce'         => $nonce,
+            'prompt'        => 'none', // verifica silenziosa: nessuna schermata
+        ];
+
+        $url = $this->settings->getAuthorizationEndpoint() . '?' . http_build_query($params);
+
+        Logger::info('account_check_start', 'Verifica silenziosa sessione (prompt=none) prima del profilo', [
+            'user_id' => $user_id,
+        ]);
+
+        wp_redirect($url);
+        exit;
+    }
+
+    /**
+     * Gestisce la risposta del check silenzioso (prompt=none) avviato da handleAccountRedirect.
+     *
+     * - error=login_required → l'utente si è sloggato da Identity: chiudiamo anche la
+     *   sessione WP e lo mandiamo al login (niente stato bloccato).
+     * - code presente (state valido) → sessione Identity viva: procediamo al profilo Identity.
+     * - altri errori → non intrappoliamo: mandiamo al profilo Identity in modo interattivo,
+     *   così Identity può gestire eventuali interazioni (es. consenso).
+     */
+    private function handleAccountCheckCallback(): void {
+        unset($_SESSION['ri_oidc_intent']);
+        $return_to = $_SESSION['ri_oidc_account_return'] ?? home_url('/');
+        unset($_SESSION['ri_oidc_account_return']);
+
+        $user_id = get_current_user_id();
+
+        if (isset($_GET['error'])) {
+            $error = sanitize_text_field($_GET['error']);
+
+            // login_required = nessuna sessione utente su Identity → l'utente è sloggato lì.
+            if ($error === 'login_required') {
+                Logger::info('account_check_logged_out', "Sessione Identity assente (prompt=none) — logout WP per utente #$user_id", [
+                    'user_id' => $user_id,
+                ]);
+                do_action('ri_session_expired', $user_id);
+                $this->forceLogout($user_id); // wp_logout + redirect (esce)
+                // forceLogout esce solo se non in ajax/cron/rest: qui è una richiesta browser normale.
+                wp_safe_redirect($return_to);
+                exit;
+            }
+
+            // Altri errori (es. interaction_required/consent_required): la sessione può essere
+            // viva ma serve interazione. Non slogghiamo: mandiamo al profilo in modo interattivo.
+            Logger::warning('account_check_error', "Check sessione: errore '$error' — redirect interattivo al profilo", [
+                'user_id' => $user_id,
+            ]);
+            wp_redirect($this->settings->getIdentityAccountUrl($return_to));
+            exit;
+        }
+
+        // Verifica CSRF dello state.
+        $state = sanitize_text_field($_GET['state'] ?? '');
+        if (!ri_verify_state($state)) {
+            Logger::error('account_check_state', 'State CSRF non valido nel check sessione');
+            wp_safe_redirect($return_to);
+            exit;
+        }
+
+        // Code presente + sessione viva: non serve scambiarlo (l'utente è già loggato su WP),
+        // andiamo al profilo Identity con i parametri returnUrl/logoutUrl standard.
+        Logger::debug('account_check_ok', "Sessione Identity valida — redirect al profilo per utente #$user_id");
+        wp_redirect($this->settings->getIdentityAccountUrl($return_to));
+        exit;
+    }
+
+    /**
      * Gestisce il callback dal server Identity dopo l'autenticazione.
      */
     public function handleCallback(): void {
+        if (session_status() === PHP_SESSION_NONE && !headers_sent()) {
+            session_start();
+        }
+
+        // Check silenzioso della sessione (prompt=none) avviato da ri_account: non è un login,
+        // va gestito a parte per non intrappolare l'utente e per non rifare la sync completa.
+        if (($_SESSION['ri_oidc_intent'] ?? '') === 'account') {
+            $this->handleAccountCheckCallback();
+            return;
+        }
+
         Logger::info('callback_received', 'Callback ricevuto dal server Identity', [
             'has_code'  => isset($_GET['code']),
             'has_state' => isset($_GET['state']),
