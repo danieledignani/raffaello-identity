@@ -1160,6 +1160,10 @@ class OidcClient {
          */
         $redirect = apply_filters('ri_session_expired_redirect', $redirect, $user_id);
 
+        // Segnala alla pagina di destinazione che la disconnessione è automatica (sessione Identity
+        // terminata via prompt=none): il Frontend mostra un avviso invece di sloggare in silenzio.
+        $redirect = add_query_arg('ri_session_ended', '1', $redirect);
+
         if (!wp_doing_ajax() && !wp_doing_cron() && !defined('REST_REQUEST')) {
             wp_safe_redirect($redirect);
             exit;

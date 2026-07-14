@@ -4,7 +4,7 @@ Tags: oidc, openid-connect, identity, sso, login
 Requires at least: 5.8
 Tested up to: 6.5
 Requires PHP: 7.4
-Stable tag: 1.6.5
+Stable tag: 1.7.0
 License: GPLv2 or later
 
 Integrazione OIDC con GruppoRaffaello.Identity — login, profilo utente, ruoli e claim configurabili.
@@ -84,6 +84,11 @@ Esempio pagina login:
 * `ri_user_synced` (action) — Chiamato dopo la sincronizzazione dell'utente. Parametri: `$user_id`, `$userinfo`, `$tokens`
 
 == Changelog ==
+
+= 1.7.0 =
+* Sincronizzazione del logout WP ↔ Identity: se l'utente si slogga da Identity, WordPress lo disconnette al primo controllo (guard `prompt=none` sul profilo), evitando lo stato bloccato "loggato su WP / sloggato su Identity".
+* Avviso "sessione terminata": quando la disconnessione è automatica, l'utente vede un messaggio esplicativo invece di essere sloggato in silenzio (personalizzabile via filtro `ri_session_ended_message`).
+* Parametri di sessione (ricontrollo/timeout) configurabili dalle impostazioni del plugin.
 
 = 1.6.5 =
 * Fix definitivo CSRF: nuovo endpoint `ri_start_login` che genera state/nonce al click (non al render). Rende gli URL di login safe-to-cache e compatibili con WP Rocket, W3 Total Cache, Cloudflare, opcache, ecc.
