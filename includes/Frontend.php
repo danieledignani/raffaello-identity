@@ -21,10 +21,6 @@ class Frontend {
     public function init(): void {
         add_action('wp_enqueue_scripts', [$this, 'enqueueAssets']);
 
-        // Avviso "sessione terminata" quando l'utente è stato disconnesso automaticamente
-        // (guard prompt=none). Emesso in footer (hook universale) solo se ?ri_session_ended=1.
-        add_action('wp_footer', [$this, 'maybeRenderSessionEndedNotice']);
-
         // Shortcodes bottone / blocco completo
         add_shortcode('ri_login', [$this, 'renderLoginButton']);
         add_shortcode('ri_logout', [$this, 'renderLogoutButton']);
@@ -105,40 +101,15 @@ class Frontend {
             'ajaxUrl'   => admin_url('admin-ajax.php'),
             'logoutUrl' => admin_url('admin-ajax.php?action=ri_logout'),
             'isLoggedIn' => is_user_logged_in(),
+            // Avviso mostrato (via JS in frontend.js) quando l'utente è stato disconnesso
+            // automaticamente perché la sessione Identity è terminata (?ri_session_ended=1).
+            // Renderizzato lato client e non in PHP: le pagine servite dalla page cache
+            // (WP Rocket/Cloudflare) non eseguono PHP, il JS gira comunque.
+            'sessionEndedMessage' => apply_filters(
+                'ri_session_ended_message',
+                'La tua sessione è terminata. Effettua di nuovo l\'accesso per continuare.'
+            ),
         ]);
-    }
-
-    /**
-     * Mostra un avviso quando l'utente è stato disconnesso automaticamente perché la sessione
-     * su Identity è terminata (guard prompt=none). Il flag ?ri_session_ended=1 è aggiunto da
-     * OidcClient::forceLogout al redirect post-logout: così la disconnessione non è più silenziosa.
-     * Il testo è personalizzabile via filtro 'ri_session_ended_message'.
-     */
-    public function maybeRenderSessionEndedNotice(): void {
-        if (!isset($_GET['ri_session_ended']) || $_GET['ri_session_ended'] !== '1') {
-            return;
-        }
-
-        $message = apply_filters(
-            'ri_session_ended_message',
-            'La tua sessione è terminata. Effettua di nuovo l\'accesso per continuare.'
-        );
-
-        echo '<style>.ri-session-ended-notice{position:fixed;top:0;left:0;right:0;z-index:99999;'
-            . 'display:flex;align-items:center;justify-content:center;gap:14px;padding:12px 16px;'
-            . 'background:#045ba9;color:#fff;font-size:15px;line-height:1.4;text-align:center;'
-            . 'box-shadow:0 2px 8px rgba(0,0,0,.2)}'
-            . '.ri-session-ended-notice .ri-session-ended-close{background:none;border:0;color:#fff;'
-            . 'font-size:22px;line-height:1;cursor:pointer;padding:0 4px;flex:0 0 auto}</style>';
-
-        printf(
-            '<div class="ri-session-ended-notice" role="status">'
-            . '<span class="ri-session-ended-text">%s</span>'
-            . '<button type="button" class="ri-session-ended-close" aria-label="Chiudi" '
-            . 'onclick="this.parentNode.remove()">&times;</button>'
-            . '</div>',
-            esc_html($message)
-        );
     }
 
     /**

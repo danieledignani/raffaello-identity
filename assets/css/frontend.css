@@ -445,3 +445,34 @@ li:has(> a.ri-menu-hide),
 .menu-item:has(> a.ri-menu-hide) {
     display: none !important;
 }
+
+/* Avviso "sessione terminata" (logout automatico via guard prompt=none) */
+.ri-session-ended-notice {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 99999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    padding: 12px 16px;
+    background: #045ba9;
+    color: #fff;
+    font-size: 15px;
+    line-height: 1.4;
+    text-align: center;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, .2);
+}
+
+.ri-session-ended-notice .ri-session-ended-close {
+    background: none;
+    border: 0;
+    color: #fff;
+    font-size: 22px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0 4px;
+    flex: 0 0 auto;
+}

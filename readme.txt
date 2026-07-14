@@ -4,7 +4,7 @@ Tags: oidc, openid-connect, identity, sso, login
 Requires at least: 5.8
 Tested up to: 6.5
 Requires PHP: 7.4
-Stable tag: 1.7.1
+Stable tag: 1.7.2
 License: GPLv2 or later
 
 Integrazione OIDC con GruppoRaffaello.Identity — login, profilo utente, ruoli e claim configurabili.
@@ -84,6 +84,9 @@ Esempio pagina login:
 * `ri_user_synced` (action) — Chiamato dopo la sincronizzazione dell'utente. Parametri: `$user_id`, `$userinfo`, `$tokens`
 
 == Changelog ==
+
+= 1.7.2 =
+* Fix: l'avviso "sessione terminata" ora compare davvero dopo il logout automatico. Il flag veniva perso nel flusso admin-ajax del check prompt=none e il banner PHP non funzionava su pagine in cache: ora il flag e' propagato esplicitamente e il banner e' renderizzato via JavaScript (cache-safe), con testo personalizzabile via filtro ri_session_ended_message.
 
 = 1.7.1 =
 * Nessuna modifica funzionale: release di verifica del canale di aggiornamento automatico (release GitHub con asset zip + metadati update-checker).

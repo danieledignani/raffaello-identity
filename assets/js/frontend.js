@@ -52,4 +52,44 @@
             });
         }
     });
+
+    // Avviso "sessione terminata" dopo un logout automatico (guard prompt=none).
+    // Renderizzato via JS e non in PHP: le pagine servite dalla page cache non
+    // eseguono PHP, ma questo script gira comunque. Il testo arriva da riData
+    // (filtro PHP ri_session_ended_message) con fallback locale.
+    try {
+        var params = new URLSearchParams(window.location.search);
+        if (params.get('ri_session_ended') === '1') {
+            var message = (window.riData && window.riData.sessionEndedMessage) ||
+                'La tua sessione è terminata. Effettua di nuovo l\'accesso per continuare.';
+
+            var notice = document.createElement('div');
+            notice.className = 'ri-session-ended-notice';
+            notice.setAttribute('role', 'status');
+
+            var text = document.createElement('span');
+            text.className = 'ri-session-ended-text';
+            text.textContent = message;
+
+            var close = document.createElement('button');
+            close.type = 'button';
+            close.className = 'ri-session-ended-close';
+            close.setAttribute('aria-label', 'Chiudi');
+            close.innerHTML = '&times;';
+            close.addEventListener('click', function () { notice.remove(); });
+
+            notice.appendChild(text);
+            notice.appendChild(close);
+            document.body.appendChild(notice);
+
+            // Pulisce l'URL: un refresh o un bookmark non devono rimostrare l'avviso.
+            params.delete('ri_session_ended');
+            var clean = window.location.pathname +
+                (params.toString() ? '?' + params.toString() : '') +
+                window.location.hash;
+            window.history.replaceState(null, '', clean);
+        }
+    } catch (err) {
+        // URLSearchParams non disponibile su browser molto datati: nessun avviso, nessun errore.
+    }
 })();

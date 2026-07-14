@@ -194,9 +194,12 @@ class OidcClient {
                     'user_id' => $user_id,
                 ]);
                 do_action('ri_session_expired', $user_id);
-                $this->forceLogout($user_id); // wp_logout + redirect (esce)
-                // forceLogout esce solo se non in ajax/cron/rest: qui è una richiesta browser normale.
-                wp_safe_redirect($return_to);
+                $this->forceLogout($user_id);
+                // Questo callback arriva via admin-ajax (wp_ajax_openid-connect-authorize):
+                // in quel contesto forceLogout NON esegue il proprio redirect (wp_doing_ajax()
+                // è true), quindi reindirizziamo qui — mantenendo il flag ri_session_ended
+                // che fa comparire l'avviso "sessione terminata" sulla pagina di destinazione.
+                wp_safe_redirect(add_query_arg('ri_session_ended', '1', $return_to));
                 exit;
             }
 
