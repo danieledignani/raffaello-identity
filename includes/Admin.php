@@ -25,10 +25,13 @@ class Admin {
     }
 
     public function addMenuPage(): void {
-        // Icona SVG inline per il menu admin (20x20, monocolore)
-        $icon_svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none">'
-            . '<path d="M128 40 L200 80 L200 140 C200 185 168 220 128 232 C88 220 56 185 56 140 L56 80 Z" fill="currentColor" opacity="0.3"/>'
-            . '<path d="M96 90 L96 180 M96 90 L140 90 C158 90 170 102 170 118 C170 134 158 144 140 144 L96 144 M140 144 L170 180" stroke="currentColor" stroke-width="14" stroke-linecap="round" stroke-linejoin="round" fill="none"/>'
+        // Filled shapes only: WordPress repaints menu icons by rewriting every fill, and ignores strokes.
+        $icon_svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">'
+            . '<path fill="black" opacity="0.3" d="M128 40 L200 80 L200 140 C200 185 168 220 128 232 C88 220 56 185 56 140 L56 80 Z"/>'
+            . '<path fill="black" d="M89 83 H103 V187 H89 Z"/>'
+            . '<path fill="black" fill-rule="evenodd" d="M96 83 H140 C162 83 177 98 177 118 C177 138 162 151 140 151 H96 Z M96 97 H140 C153 97 163 106 163 118 C163 130 153 137 140 137 H96 Z"/>'
+            . '<path fill="black" d="M134.6 148.5 L164.6 184.5 L175.4 175.5 L145.4 139.5 Z"/>'
+            . '<circle fill="black" cx="170" cy="180" r="7"/>'
             . '</svg>';
         $icon_base64 = 'data:image/svg+xml;base64,' . base64_encode($icon_svg);
 
@@ -69,7 +72,6 @@ class Admin {
             'test'     => 'Test Connessione',
             'log'      => 'Log',
             'debug'    => 'Debug',
-            'server'   => 'Requisiti Server',
         ];
 
         echo '<div class="wrap ri-admin-wrap">';
@@ -95,9 +97,6 @@ class Admin {
                 break;
             case 'debug':
                 $this->renderDebugTab();
-                break;
-            case 'server':
-                $this->renderServerSetupTab();
                 break;
             default:
                 $this->renderSettingsTab();
@@ -147,6 +146,8 @@ class Admin {
 
         // Registrazione e login
         $options['auto_register'] = isset($_POST['ri_auto_register']);
+        $options['email_linking'] = isset($_POST['ri_email_linking']);
+        $options['support_contact'] = sanitize_text_field(wp_unslash($_POST['ri_support_contact'] ?? ''));
         $options['login_button_text'] = sanitize_text_field($_POST['ri_login_button_text'] ?? '');
         $options['override_wp_login'] = isset($_POST['ri_override_wp_login']);
 
@@ -185,6 +186,7 @@ class Admin {
                 }
             }
         }
+        $mapping_changed = $role_mapping !== $options['role_mapping'];
         $options['role_mapping'] = $role_mapping;
 
         // Mappatura claim
@@ -205,6 +207,11 @@ class Admin {
 
         ri_save_options($options);
         $this->settings->reload();
+
+        // After saving: the realignment must read the new mapping.
+        if ($mapping_changed) {
+            Upgrade::scheduleRealign();
+        }
 
         add_settings_error('ri_settings', 'saved', 'Impostazioni salvate.', 'success');
     }
@@ -618,7 +625,7 @@ class Admin {
             'ok'     => true,
         ];
 
-        $custom_roles = ['studente', 'docente'];
+        $custom_roles = ['studente', 'docente', 'concessionario'];
         $missing_roles = [];
         foreach ($custom_roles as $role) {
             if (!get_role($role)) {
@@ -629,7 +636,7 @@ class Admin {
             'label'  => 'Ruoli WP personalizzati',
             'value'  => empty($missing_roles) ? 'Tutti registrati' : 'Mancanti: ' . implode(', ', $missing_roles),
             'ok'     => empty($missing_roles),
-            'fix'    => 'Disattiva e riattiva il plugin per registrare i ruoli mancanti.',
+            'fix'    => 'Disattiva e riattiva il plugin per registrare i ruoli mancanti (di norma li crea da solo dopo un aggiornamento).',
         ];
 
         $checks['debug_mode'] = [
@@ -654,99 +661,5 @@ class Admin {
                 : 'Alcuni controlli hanno rilevato problemi.',
             'checks'  => $checks,
         ];
-    }
-
-    // =========================================================================
-    // Tab: Requisiti Server
-    // =========================================================================
-
-    /**
-     * Mostra la configurazione nginx richiesta per il funzionamento del logout OIDC.
-     *
-     * Il logout federato costruisce un URL verso l'end_session endpoint includendo
-     * "id_token_hint" con il JWT completo dell'utente (2-5KB). La Location header
-     * risultante supera facilmente i buffer di default di nginx (4/8KB), generando
-     * errori "upstream sent too big header" e risposte 502 Bad Gateway.
-     * Le direttive proposte qui alzano i buffer FastCGI e proxy a valori sicuri.
-     */
-    private function renderServerSetupTab(): void {
-        $nginx_config = <<<'NGINX'
-# Raffaello Identity — buffer grandi per il logout OIDC.
-# Il Location header del redirect al /connect/logout contiene
-# l'id_token_hint (JWT 2-5KB) che eccede i default nginx (4/8KB).
-fastcgi_buffer_size 32k;
-fastcgi_buffers 8 32k;
-fastcgi_busy_buffers_size 64k;
-proxy_buffer_size 32k;
-proxy_buffers 8 32k;
-proxy_busy_buffers_size 64k;
-NGINX;
-
-        ?>
-        <div class="ri-server-setup">
-            <h2>Configurazione nginx per il logout OIDC</h2>
-
-            <div class="notice notice-warning inline" style="margin: 12px 0;">
-                <p>
-                    <strong>Se vedi errori 502 Bad Gateway al logout</strong> (su <code>/wp-admin/admin-ajax.php?action=ri_logout</code>),
-                    molto probabilmente i buffer di nginx sono troppo piccoli per
-                    gestire la Location header del redirect all'Identity Server.
-                </p>
-            </div>
-
-            <h3>Causa</h3>
-            <p>
-                Il logout federato chiama l'endpoint <code>/connect/logout</code> dell'Identity Server
-                passando <code>id_token_hint</code> con il JWT completo dell'utente (2-5&nbsp;KB) e
-                <code>post_logout_redirect_uri</code>. L'URL completo finisce nella <code>Location</code>
-                header del redirect e supera i buffer di default di nginx (4/8&nbsp;KB),
-                generando l'errore <code>upstream sent too big header while reading response header from upstream</code>
-                e un 502 Bad Gateway.
-            </p>
-
-            <h3>Soluzione — direttive nginx</h3>
-            <p>Aggiungi queste direttive alla configurazione nginx del vhost:</p>
-
-            <div class="ri-code-block">
-                <textarea readonly rows="9" style="width: 100%; font-family: monospace; font-size: 12px; background: #f6f7f7; padding: 12px;"><?php echo esc_textarea($nginx_config); ?></textarea>
-                <p>
-                    <button type="button" class="button" onclick="navigator.clipboard.writeText(this.previousElementSibling.previousElementSibling.value).then(() => { this.textContent = '✓ Copiato'; setTimeout(() => this.textContent = 'Copia negli appunti', 2000); })">
-                        Copia negli appunti
-                    </button>
-                </p>
-            </div>
-
-            <h3>Dove inserirle</h3>
-            <h4>Plesk</h4>
-            <ol>
-                <li>Plesk → Websites &amp; Domains → tuo dominio</li>
-                <li><strong>Apache &amp; nginx Settings</strong></li>
-                <li>Scroll fino a <strong>Additional nginx directives</strong></li>
-                <li>Incolla il blocco qui sopra e salva (Plesk ricarica nginx automaticamente)</li>
-            </ol>
-
-            <h4>nginx diretto</h4>
-            <ol>
-                <li>Modifica il file del vhost (es. <code>/etc/nginx/sites-available/tuo-dominio.conf</code>)</li>
-                <li>Aggiungi le direttive nel blocco <code>server { ... }</code> o dentro il <code>location</code> che gestisce PHP</li>
-                <li>Verifica e ricarica: <code>nginx -t &amp;&amp; systemctl reload nginx</code></li>
-            </ol>
-
-            <h3>Verifica</h3>
-            <p>Dopo il reload:</p>
-            <ol>
-                <li>Fai login, vai alla tua pagina account, clicca "Esci"</li>
-                <li>Il logout deve completare senza errore 502</li>
-                <li>In <code>/var/log/nginx/error.log</code> non deve più comparire <code>upstream sent too big header</code></li>
-            </ol>
-        </div>
-
-        <style>
-            .ri-server-setup h3 { margin-top: 24px; }
-            .ri-server-setup h4 { margin-bottom: 4px; }
-            .ri-server-setup ol { margin-left: 20px; }
-            .ri-code-block { margin: 12px 0; }
-        </style>
-        <?php
     }
 }

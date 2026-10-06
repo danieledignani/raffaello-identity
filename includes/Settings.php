@@ -71,10 +71,10 @@ class Settings {
      */
     public function getIdentityAccountUrl(?string $return_to = null): string {
         $return_to = $return_to ?: home_url('/');
-        $logout_return = admin_url('admin-ajax.php?action=ri_local_logout&return_to=' . rawurlencode($return_to));
+        // The logout lands on the home page: $return_to may need a login, as My Account does.
         $query = http_build_query([
             'returnUrl' => $return_to,
-            'logoutUrl' => $logout_return,
+            'logoutUrl' => admin_url('admin-ajax.php?action=ri_local_logout'),
         ]);
         return $this->getIssuer() . '/Identity/Account/Manage?' . $query;
     }

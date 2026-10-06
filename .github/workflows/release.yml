@@ -21,6 +21,9 @@ jobs:
         run: |
           VERSION=${GITHUB_REF#refs/tags/}
           sed -i "s/^\(\s*\*\s*Version:\s*\).*/\1$VERSION/" raffaello-identity.php
+          # RI_VERSION drives the database upgrade (includes/Upgrade.php): it must match the tag.
+          sed -i "s/define('RI_VERSION', '[^']*');/define('RI_VERSION', '$VERSION');/" raffaello-identity.php
+          grep -q "define('RI_VERSION', '$VERSION');" raffaello-identity.php
 
       - name: Create plugin zip
         run: |
@@ -75,7 +78,7 @@ jobs:
             "download_url": "https://github.com/danieledignani/raffaello-identity/releases/download/$VERSION/raffaello-identity.zip",
             "homepage": "https://raffaellolibri.it",
             "requires": "5.8",
-            "tested": "6.5",
+            "tested": "7.1",
             "requires_php": "7.4",
             "last_updated": "$TIMESTAMP",
             "upgrade_notice": "Aggiornamento automatico da GitHub",

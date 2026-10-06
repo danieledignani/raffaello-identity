@@ -19,8 +19,9 @@ function ri_get_options(): array {
         'login_redirect'    => home_url('/profilo/'),
         'logout_redirect'   => home_url('/'),
         'role_mapping'      => [
-            'Studente' => 'studente',
-            'Docente'  => 'docente',
+            'Studente'       => 'studente',
+            'Docente'        => 'docente',
+            'Concessionario' => 'concessionario',
         ],
         'claim_mapping'     => [
             'nome'      => 'first_name',
@@ -29,6 +30,8 @@ function ri_get_options(): array {
         ],
         'extra_claims'      => 'profilo,sostegno,consensoMarketing,consensoProfilazione,consensoTerzeParti,joomla_sub',
         'auto_register'     => true,
+        'email_linking'     => true,
+        'support_contact'   => '',
         // Sessione OIDC
         // Ogni quanti secondi rivalidare la sessione forzando un refresh (propaga a WP il
         // logout fatto su Identity). Timeout (s) delle chiamate di refresh.

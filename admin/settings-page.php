@@ -100,6 +100,17 @@ function ri_locked_notice(string $option_key, array $ri_constants): void {
                         <p class="description">Configurare questo URL come redirect_uri nel client Identity.</p>
                     </td>
                 </tr>
+                <tr>
+                    <th>Webhook cancellazione</th>
+                    <td>
+                        <code><?php echo esc_html(\RaffaelloIdentity\DeletionWebhook::getUrl()); ?></code>
+                        <p class="description">
+                            Da configurare su Identity in <code>Webhooks:DeletedUtente</code>, con la chiave della costante
+                            <code>RI_WEBHOOK_KEY</code> in wp-config.php:
+                            <?php echo \RaffaelloIdentity\DeletionWebhook::isConfigured() ? 'definita.' : '<strong>non definita, il webhook rifiuta ogni chiamata</strong>.'; ?>
+                        </p>
+                    </td>
+                </tr>
             </table>
         </div>
 
@@ -168,6 +179,32 @@ function ri_locked_notice(string $option_key, array $ri_constants): void {
                                 <?php checked($opts['auto_register']); ?>>
                             Crea automaticamente gli utenti WordPress al primo login OIDC
                         </label>
+                    </td>
+                </tr>
+                <tr>
+                    <th>Collegamento per email</th>
+                    <td>
+                        <label>
+                            <input type="checkbox" name="ri_email_linking" value="1"
+                                <?php checked($opts['email_linking']); ?>>
+                            Al primo accesso collega l'utente WordPress che ha la stessa email
+                        </label>
+                        <p class="description">
+                            Se disattivo, chi non ha ancora il Subject ID salvato non viene collegato a un account esistente:
+                            se la sua email è già usata sul sito l'accesso è rifiutato, altrimenti riceve un account nuovo
+                            (con l'auto-registrazione attiva). Un account già collegato a un altro utente Identity non viene mai ricollegato.
+                        </p>
+                    </td>
+                </tr>
+                <tr>
+                    <th><label for="ri_support_contact">Contatto assistenza</label></th>
+                    <td>
+                        <input type="text" id="ri_support_contact" name="ri_support_contact" class="regular-text"
+                               value="<?php echo esc_attr($opts['support_contact']); ?>">
+                        <p class="description">
+                            Indicato a chi non può entrare perché la sua email è già usata da un altro account del sito.
+                            Vuoto: il messaggio rimanda genericamente all'assistenza.
+                        </p>
                     </td>
                 </tr>
                 <tr>

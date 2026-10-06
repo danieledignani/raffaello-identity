@@ -76,8 +76,10 @@ class RoleMapper {
      */
     public static function getAvailableIdentityRoles(): array {
         return [
-            'Studente' => 'Studente',
-            'Docente'  => 'Docente',
+            'Studente'       => 'Studente',
+            'Docente'        => 'Docente',
+            'Concessionario' => 'Concessionario',
+            'Utente'         => 'Utente',
         ];
     }
 

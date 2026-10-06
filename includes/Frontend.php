@@ -85,7 +85,11 @@ class Frontend {
 
         // Sovrascrive il link "Il mio account" nel menu WooCommerce
         add_filter('woocommerce_login_redirect', [$this, 'wcLoginRedirect'], 10, 2);
-        add_filter('woocommerce_logout_redirect', [$this, 'wcLogoutRedirect']);
+
+        // For Identity users logout and account details belong to Identity.
+        add_filter('woocommerce_get_endpoint_url', [$this, 'filterWcEndpointUrl'], 10, 2);
+        // Before WooCommerce, which handles both endpoints on template_redirect at priority 10.
+        add_action('template_redirect', [$this, 'redirectWcAccountEndpoints'], 5);
 
         // Intercetta il checkout per utenti non loggati
         add_filter('woocommerce_checkout_must_be_logged_in_message', [$this, 'wcCheckoutLoginMessage']);
@@ -577,10 +581,47 @@ class Frontend {
     }
 
     /**
-     * Redirect dopo logout WooCommerce → logout federato via Identity.
+     * WooCommerce's own logout endpoint only ends the WP session, and My Account then sends the
+     * user back to Identity, still signed in. Account details would edit data Identity owns.
+     * The filter receives the endpoint slug, which the shop may have renamed.
      */
-    public function wcLogoutRedirect(): string {
-        return admin_url('admin-ajax.php?action=ri_logout');
+    public function filterWcEndpointUrl(string $url, string $endpoint): string {
+        if (!$this->isIdentityUser()) {
+            return $url;
+        }
+
+        $slugs = WC()->query->get_query_vars();
+        if ($endpoint === $slugs['customer-logout']) {
+            return admin_url('admin-ajax.php?action=ri_logout');
+        }
+        if ($endpoint === $slugs['edit-account']) {
+            return $this->settings->getAccountUrl(wc_get_page_permalink('myaccount'));
+        }
+
+        return $url;
+    }
+
+    /**
+     * The same two endpoints reached directly. get_current_endpoint() returns the key whether the
+     * request used the slug or the key, which WooCommerce also registers as a query var.
+     */
+    public function redirectWcAccountEndpoints(): void {
+        if (!$this->isIdentityUser()) {
+            return;
+        }
+
+        switch (WC()->query->get_current_endpoint()) {
+            case 'customer-logout':
+                wp_safe_redirect(admin_url('admin-ajax.php?action=ri_logout'));
+                exit;
+            case 'edit-account':
+                wp_safe_redirect($this->settings->getAccountUrl(wc_get_page_permalink('myaccount')));
+                exit;
+        }
+    }
+
+    private function isIdentityUser(): bool {
+        return is_user_logged_in() && get_user_meta(get_current_user_id(), 'ri_oidc_sub', true) !== '';
     }
 
     /**

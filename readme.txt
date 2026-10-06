@@ -2,9 +2,9 @@
 Contributors: grupporaffaello
 Tags: oidc, openid-connect, identity, sso, login
 Requires at least: 5.8
-Tested up to: 6.5
+Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.7.2
+Stable tag: 1.8.0
 License: GPLv2 or later
 
 Integrazione OIDC con GruppoRaffaello.Identity — login, profilo utente, ruoli e claim configurabili.
@@ -15,12 +15,12 @@ Plugin WordPress per l'integrazione SSO con il server GruppoRaffaello.Identity t
 
 Funzionalità:
 * Login SSO con il server Identity Raffaello
-* Mappatura automatica ruoli (Studente, Docente) → ruoli WordPress
+* Mappatura automatica dei profili (Studente, Docente, Concessionario; Utente riceve il ruolo di default) → ruoli WordPress
 * Claim e scope configurabili dall'admin WordPress
 * Pagina profilo utente frontend con dati Identity
 * Auto-registrazione utenti al primo login
 * Logout federato
-* Pulsante login nella pagina wp-login.php standard
+* wp-login.php resta il login locale di WordPress (per gli amministratori)
 
 == Configurazione ==
 
@@ -33,6 +33,7 @@ Funzionalità:
    - **Scope**: `openid email profile offline_access roles`
 4. Configurare il redirect_uri nel server Identity con il valore mostrato nella pagina impostazioni
 5. Configurare la mappatura ruoli Identity → WordPress
+6. Per ricevere le cancellazioni da Identity: definire in wp-config.php `define('RI_WEBHOOK_KEY', '...');` (chiave alfanumerica lunga) e configurare su Identity, in `Webhooks:DeletedUtente`, l'URL mostrato nella pagina impostazioni con la stessa chiave
 
 == Shortcode ==
 
@@ -84,6 +85,18 @@ Esempio pagina login:
 * `ri_user_synced` (action) — Chiamato dopo la sincronizzazione dell'utente. Parametri: `$user_id`, `$userinfo`, `$tokens`
 
 == Changelog ==
+
+= 1.8.0 =
+* Email allineata a Identity a ogni accesso: l'email dell'utente WordPress e quella di fatturazione WooCommerce seguono il profilo Identity, senza la notifica di WordPress al vecchio indirizzo. Se l'indirizzo è ancora usato da un altro account WordPress, l'email dell'account resta com'è (quella di fatturazione si allinea comunque) e il conflitto finisce nel log.
+* Collegamento per email: un account WordPress già collegato a un altro account Identity non viene più ricollegato; l'accesso è rifiutato (403) con un messaggio che rimanda al nuovo "Contatto assistenza". Il collegamento automatico per email si può disattivare per sito: in quel caso chi ha un'email già usata sul sito riceve lo stesso messaggio.
+* Cancellazione da Identity: endpoint REST `raffaello-identity/v1/utente-eliminato` per il webhook `DeletedUtente`, protetto dalla costante `RI_WEBHOOK_KEY`. L'utente WordPress viene eliminato (gli ordini WooCommerce restano come ordini ospite); chi ha `edit_posts` viene solo scollegato e perde i dati e i ruoli presi da Identity.
+* L'avatar copiato da Identity viene cancellato insieme all'utente WordPress.
+* Profili: il plugin conosce i quattro profili di Identity (Studente, Docente, Concessionario, Utente); nuovo ruolo `concessionario` mappato di default, Utente riceve il ruolo di default. Il plugin ricorda i ruoli che assegna, così un cambio di mappatura toglie quelli vecchi.
+* Aggiornamento del database: dopo un aggiornamento automatico il plugin crea i ruoli mancanti, aggiunge la mappatura di Concessionario, cancella gli `id_token` salvati e ricalcola a lotti (WP-Cron, ripresa automatica se un giro si interrompe) i ruoli degli utenti già collegati; lo stesso ricalcolo riparte da capo quando si cambia la mappatura nelle impostazioni.
+* Logout: il logout federato manda a Identity il `client_id` invece dell'`id_token`, così l'URL resta corto e non servono più i buffer nginx ampliati (tolta la tab "Requisiti Server"). L'"Esci" di My Account WooCommerce passa dal logout federato invece del logout solo locale, che rimandava subito al login di Identity.
+* My Account WooCommerce: "Dettagli account" porta al profilo su Identity, dove si gestiscono dati e password; anche l'accesso diretto agli endpoint di logout e dettagli account viene deviato. Dopo "Esci" dal profilo Identity si atterra sulla home del sito.
+* Icona del menu admin ridisegnata con sole forme piene: WordPress la ricolorava riempiendo l'interno della R.
+* Comprende la correzione della 1.7.2, mai rilasciata.
 
 = 1.7.2 =
 * Fix: l'avviso "sessione terminata" ora compare davvero dopo il logout automatico. Il flag veniva perso nel flusso admin-ajax del check prompt=none e il banner PHP non funzionava su pagine in cache: ora il flag e' propagato esplicitamente e il banner e' renderizzato via JavaScript (cache-safe), con testo personalizzabile via filtro ri_session_ended_message.

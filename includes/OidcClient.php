@@ -61,6 +61,8 @@ class OidcClient {
         // Per gli utenti OIDC, tutti i link di logout (WooCommerce, WP, ecc.)
         // devono passare dal logout federato sul server Identity
         add_filter('logout_url', [$this, 'filterLogoutUrl'], 10, 2);
+
+        add_action('delete_user', [$this, 'deleteAvatar']);
     }
 
     /**
@@ -340,6 +342,11 @@ class OidcClient {
         // Crea o aggiorna l'utente WP
         $user_id = $this->syncUser($userinfo, $tokens);
         if (is_wp_error($user_id)) {
+            // An expected refusal, already logged by syncUser.
+            if ($user_id->get_error_code() === 'link_conflict') {
+                wp_die(esc_html($user_id->get_error_message()), 'Accesso non consentito', ['response' => 403]);
+            }
+
             Logger::error('user_sync_failed', 'Sincronizzazione utente fallita: ' . $user_id->get_error_message(), [
                 'error_code'    => $user_id->get_error_code(),
                 'error_message' => $user_id->get_error_message(),
@@ -512,21 +519,32 @@ class OidcClient {
 
         $user = !empty($users) ? $users[0] : null;
 
-        // Fallback: cerca per email
-        if (!$user) {
+        if ($user) {
+            Logger::debug('sync_found_by_sub', "Utente esistente trovato per subject ID", [
+                'user_id' => $user->ID,
+                'sub'     => $sub,
+            ]);
+        } elseif ($this->settings->get('email_linking')) {
             $user = get_user_by('email', $email);
             if ($user) {
+                // Found by email but linked to another sub: the address belonged to another Identity account.
+                $linked_sub = get_user_meta($user->ID, 'ri_oidc_sub', true);
+                if ($linked_sub !== '') {
+                    Logger::warning('sync_link_conflict', "Email già collegata a un altro account Identity: accesso rifiutato", [
+                        'user_id'    => $user->ID,
+                        'email'      => $email,
+                        'sub'        => $sub,
+                        'linked_sub' => $linked_sub,
+                    ]);
+                    return new \WP_Error('link_conflict', $this->getLinkConflictMessage());
+                }
+
                 Logger::info('sync_found_by_email', "Utente trovato per email (non per sub), collegamento in corso", [
                     'user_id' => $user->ID,
                     'email'   => $email,
                     'sub'     => $sub,
                 ]);
             }
-        } else {
-            Logger::debug('sync_found_by_sub', "Utente esistente trovato per subject ID", [
-                'user_id' => $user->ID,
-                'sub'     => $sub,
-            ]);
         }
 
         /**
@@ -570,14 +588,51 @@ class OidcClient {
             }
             $update_data['display_name'] = trim("$nome $cognome") ?: $user->display_name;
 
-            wp_update_user($update_data);
+            // WordPress would mail the old address, which may belong to someone else by now.
+            $no_email_change_mail = static fn() => false;
+
+            // The email comes from Identity, unless another WP account still holds that address.
+            if (strcasecmp($email, $user->user_email) !== 0) {
+                $owner_id = email_exists($email);
+                if ($owner_id) {
+                    Logger::warning('sync_email_conflict', "Email di Identity già usata dall'utente WP #$owner_id: email non aggiornata", [
+                        'user_id'  => $user->ID,
+                        'email'    => $email,
+                        'owner_id' => $owner_id,
+                    ]);
+                } else {
+                    $update_data['user_email'] = $email;
+                    add_filter('send_email_change_email', $no_email_change_mail, PHP_INT_MAX);
+                }
+            }
+
+            $result = wp_update_user($update_data);
+            remove_filter('send_email_change_email', $no_email_change_mail, PHP_INT_MAX);
             $user_id = $user->ID;
 
-            Logger::info('sync_user_updated', "Utente aggiornato", [
-                'user_id' => $user_id,
-                'email'   => $email,
-            ]);
+            if (is_wp_error($result)) {
+                Logger::warning('sync_update_failed', 'Aggiornamento utente fallito: ' . $result->get_error_message(), [
+                    'user_id' => $user_id,
+                    'email'   => $email,
+                ]);
+            } else {
+                Logger::info('sync_user_updated', "Utente aggiornato", [
+                    'user_id' => $user_id,
+                    'email'   => $email,
+                ]);
+            }
         } else {
+            // Reachable with email linking off: an account with this address exists but may not be linked.
+            $owner_id = email_exists($email);
+            if ($owner_id) {
+                Logger::warning('sync_email_in_use', "Email già usata dall'utente WP #$owner_id e collegamento per email spento: accesso rifiutato", [
+                    'user_id' => $owner_id,
+                    'email'   => $email,
+                    'sub'     => $sub,
+                ]);
+                return new \WP_Error('link_conflict', $this->getLinkConflictMessage());
+            }
+
             // Auto-registrazione
             if (!$this->settings->get('auto_register')) {
                 Logger::warning('sync_auto_register_disabled', "Tentativo di auto-registrazione bloccato (disabilitata)", [
@@ -656,6 +711,9 @@ class OidcClient {
         update_user_meta($user_id, 'ri_oidc_sub', $sub);
         update_user_meta($user_id, 'ri_oidc_userinfo', $userinfo);
 
+        // WooCommerce prefills the checkout and sends the order mails to this address.
+        update_user_meta($user_id, 'billing_email', $email);
+
         // Scarica e salva l'avatar dal server Identity
         $this->syncAvatar($user_id, $userinfo);
 
@@ -667,17 +725,69 @@ class OidcClient {
         }
 
         // Mappa i ruoli
-        $this->mapRoles($user_id, $userinfo);
+        Logger::info('roles_mapped', "Ruoli mappati per utente #$user_id", [
+            'user_id'        => $user_id,
+            'oidc_roles'     => $userinfo['role'] ?? [],
+            'profilo'        => $userinfo['profilo'] ?? '',
+            'mapped'         => $this->mapRoles($user_id, $userinfo),
+            'wp_roles_final' => get_userdata($user_id)->roles,
+        ]);
 
         do_action('ri_user_synced', $user_id, $userinfo, $tokens);
 
         return $user_id;
     }
 
+    private function getLinkConflictMessage(): string {
+        $message = 'Questo indirizzo email è già usato da un altro account del sito, quindi non possiamo farti entrare.';
+        $contact = $this->settings->get('support_contact');
+
+        return $contact !== ''
+            ? "$message Scrivi a $contact per sistemare l'accesso."
+            : "$message Contatta l'assistenza del sito per sistemare l'accesso.";
+    }
+
     /**
-     * Mappa i ruoli OIDC ai ruoli WordPress.
+     * Turns the account back into a local one: no tokens, no open sessions, no data or roles from Identity.
      */
-    private function mapRoles(int $user_id, array $userinfo): void {
+    public function unlink(int $user_id): void {
+        $this->clearTokens($user_id);
+        \WP_Session_Tokens::get_instance($user_id)->destroy_all();
+
+        $user = get_userdata($user_id);
+        foreach ($this->getPreviousMappedRoles($user_id) as $role) {
+            $user->remove_role($role);
+        }
+        delete_user_meta($user_id, 'ri_mapped_roles');
+
+        delete_user_meta($user_id, 'ri_oidc_userinfo');
+        delete_user_meta($user_id, 'ri_debug_userinfo');
+        foreach ($this->settings->getExtraClaims() as $claim) {
+            delete_user_meta($user_id, 'ri_claim_' . sanitize_key($claim));
+        }
+        $this->deleteAvatar($user_id);
+
+        // Last: the webhook finds the user by sub, so a retry can finish an interrupted unlink.
+        delete_user_meta($user_id, 'ri_oidc_sub');
+    }
+
+    public function deleteAvatar(int $user_id): void {
+        $path = get_user_meta($user_id, 'ri_avatar_path', true);
+        if ($path) {
+            @unlink($path);
+        }
+        delete_user_meta($user_id, 'ri_avatar_url');
+        delete_user_meta($user_id, 'ri_avatar_path');
+        delete_user_meta($user_id, 'ri_avatar_source_url');
+    }
+
+    /**
+     * Mappa i ruoli OIDC ai ruoli WordPress. The roles it adds are kept in ri_mapped_roles,
+     * so that a later change of the mapping can take them away.
+     *
+     * @return string[] The assignments, for the log.
+     */
+    public function mapRoles(int $user_id, array $userinfo): array {
         $role_mapping = $this->settings->getRoleMapping();
         $roles = $userinfo['role'] ?? [];
 
@@ -687,50 +797,53 @@ class OidcClient {
 
         $user = get_userdata($user_id);
         if (!$user) {
-            return;
+            return [];
         }
 
-        // Rimuovi ruoli precedenti mappati dal plugin
-        $mapped_wp_roles = array_values($role_mapping);
-        foreach ($user->roles as $existing_role) {
-            if (in_array($existing_role, $mapped_wp_roles, true)) {
-                $user->remove_role($existing_role);
-            }
-        }
-
-        // Assegna nuovi ruoli
-        $assigned = false;
-        $assigned_roles = [];
+        $mapped = [];
         foreach ($roles as $oidc_role) {
             if (isset($role_mapping[$oidc_role])) {
-                $user->add_role($role_mapping[$oidc_role]);
-                $assigned_roles[] = "$oidc_role → {$role_mapping[$oidc_role]}";
-                $assigned = true;
+                $mapped[$oidc_role] = $role_mapping[$oidc_role];
             }
         }
 
-        // Mappa anche in base al profilo se presente
+        // Mappa in base al profilo se nessun ruolo è mappato
         $profilo = $userinfo['profilo'] ?? '';
-        if (!empty($profilo) && isset($role_mapping[$profilo]) && !$assigned) {
-            $user->add_role($role_mapping[$profilo]);
-            $assigned_roles[] = "profilo:$profilo → {$role_mapping[$profilo]}";
-            $assigned = true;
+        if (!$mapped && isset($role_mapping[$profilo])) {
+            $mapped["profilo:$profilo"] = $role_mapping[$profilo];
+        }
+
+        // Only the roles that go: removing and adding back the others would fire role-change hooks for nothing.
+        foreach (array_diff($this->getPreviousMappedRoles($user_id), $mapped) as $role) {
+            $user->remove_role($role);
+        }
+        foreach ($mapped as $wp_role) {
+            $user->add_role($wp_role);
+        }
+        update_user_meta($user_id, 'ri_mapped_roles', array_values(array_unique($mapped)));
+
+        $assigned = [];
+        foreach ($mapped as $from => $wp_role) {
+            $assigned[] = "$from → $wp_role";
         }
 
         // Se nessun ruolo mappato, assegna "customer" (WooCommerce) se esiste, altrimenti "subscriber"
-        if (!$assigned) {
+        if (!$mapped) {
             $default_role = get_role('customer') ? 'customer' : 'subscriber';
             $user->add_role($default_role);
-            $assigned_roles[] = "(default) → $default_role";
+            $assigned[] = "(default) → $default_role";
         }
 
-        Logger::info('roles_mapped', "Ruoli mappati per utente #$user_id", [
-            'user_id'        => $user_id,
-            'oidc_roles'     => $roles,
-            'profilo'        => $profilo,
-            'mapped'         => $assigned_roles,
-            'wp_roles_final' => get_userdata($user_id)->roles,
-        ]);
+        return $assigned;
+    }
+
+    /**
+     * The roles the mapping gave the account. Accounts synced before 1.8.0 have no record:
+     * the targets of the mapping of that version, saved by the upgrade, stand in for it.
+     */
+    private function getPreviousMappedRoles(int $user_id): array {
+        $tracked = get_user_meta($user_id, 'ri_mapped_roles', true);
+        return is_array($tracked) ? $tracked : get_option('ri_legacy_role_targets', []);
     }
 
     /**
@@ -738,27 +851,21 @@ class OidcClient {
      */
     public function handleLogout(): void {
         $user_id = get_current_user_id();
-        $id_token = get_user_meta($user_id, 'ri_id_token', true);
 
         Logger::info('logout_start', "Logout avviato per utente #$user_id", [
-            'user_id'      => $user_id,
-            'has_id_token' => !empty($id_token),
+            'user_id' => $user_id,
         ]);
 
         // Logout WordPress
         wp_logout();
-
-        // Cancella i token salvati (l'id_token è già stato letto sopra per l'id_token_hint).
         $this->clearTokens($user_id);
 
-        // Redirect al logout del server Identity
+        // Identity shows its confirmation page either way: client_id is enough, while an
+        // id_token_hint made the Location header too large for nginx's default buffers.
         $params = [
+            'client_id'                => $this->settings->get('client_id'),
             'post_logout_redirect_uri' => $this->settings->get('logout_redirect', home_url('/')),
         ];
-
-        if (!empty($id_token)) {
-            $params['id_token_hint'] = $id_token;
-        }
 
         $logout_url = $this->settings->getEndSessionEndpoint() . '?' . http_build_query($params);
 
@@ -812,9 +919,6 @@ class OidcClient {
         if (!empty($tokens['refresh_token'])) {
             update_user_meta($user_id, 'ri_refresh_token', $tokens['refresh_token']);
         }
-        if (!empty($tokens['id_token'])) {
-            update_user_meta($user_id, 'ri_id_token', $tokens['id_token']);
-        }
 
         // Salva il timestamp di scadenza dell'access token
         if (!empty($tokens['expires_in'])) {
@@ -841,7 +945,7 @@ class OidcClient {
     private function clearTokens(int $user_id): void {
         delete_user_meta($user_id, 'ri_access_token');
         delete_user_meta($user_id, 'ri_refresh_token');
-        delete_user_meta($user_id, 'ri_id_token');
+        delete_user_meta($user_id, 'ri_id_token'); // saved before 1.8.0
         delete_user_meta($user_id, 'ri_token_expires_at');
         delete_user_meta($user_id, 'ri_refresh_expires_at');
         delete_user_meta($user_id, 'ri_next_check');
