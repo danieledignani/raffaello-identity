@@ -1,18 +1,18 @@
 {
   "name": "Raffaello Identity",
-  "version": "1.7.1",
-  "download_url": "https://github.com/danieledignani/raffaello-identity/releases/download/1.7.1/raffaello-identity.zip",
+  "version": "1.8.0",
+  "download_url": "https://github.com/danieledignani/raffaello-identity/releases/download/1.8.0/raffaello-identity.zip",
   "homepage": "https://raffaellolibri.it",
   "requires": "5.8",
-  "tested": "6.5",
+  "tested": "7.1",
   "requires_php": "7.4",
-  "last_updated": "2026-07-14 13:54:08",
+  "last_updated": "2026-10-06 16:27:59",
   "upgrade_notice": "Aggiornamento automatico da GitHub",
   "author": "Gruppo Raffaello",
   "author_homepage": "https://github.com/danieledignani",
   "sections": {
     "description": "Integrazione OIDC con GruppoRaffaello.Identity — login, profilo utente, ruoli e scope/claim configurabili.",
     "installation": "Carica il plugin tramite il pannello 'Plugin > Aggiungi nuovo' o scompatta nella cartella wp-content/plugins/",
-    "changelog": "<li>Release 1.7.1 - verifica canale di aggiornamento automatico</li>\n<li>feat: avviso 'sessione terminata' al logout automatico + bump 1.7.0</li>\n<li>feat: guard prompt=none sul profilo per evitare lo stato bloccato WP/Identity</li>\n<li>feat: parametri di sessione configurabili dalle impostazioni</li>\n<li>fix: propaga a WordPress il logout eseguito su Identity</li>\n<li>Update JSON to version 1.6.5</li>"
+    "changelog": "<li>feat: account allineato a Identity, webhook di cancellazione, profili e migrazione (1.8.0)</li>\n<li>fix: propaga il flag ri_session_ended nel callback ajax e rende l'avviso cache-safe (1.7.2)</li>\n<li>Update JSON to version 1.7.1</li>"
   }
 }
