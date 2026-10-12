@@ -3,7 +3,7 @@
  * Plugin Name: Raffaello Identity
  * Plugin URI: https://raffaellolibri.it
  * Description: Integrazione OIDC con GruppoRaffaello.Identity — login, profilo utente, ruoli (Studente, Docente, ecc.) e scope/claim configurabili.
- * Version: 1.8.0
+ * Version: 1.8.1
  * Author: Gruppo Raffaello
  * Text Domain: raffaello-identity
  * Domain Path: /languages
@@ -15,7 +15,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('RI_VERSION', '1.8.0');
+define('RI_VERSION', '1.8.1');
 define('RI_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('RI_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('RI_PLUGIN_BASENAME', plugin_basename(__FILE__));
@@ -53,7 +53,6 @@ add_action('plugins_loaded', function () {
     RaffaelloIdentity\Upgrade::maybeRun();
 
     $settings = new RaffaelloIdentity\Settings();
-    $settings->init();
 
     $oidc = new RaffaelloIdentity\OidcClient($settings);
     $oidc->init();

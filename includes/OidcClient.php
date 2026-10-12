@@ -27,11 +27,11 @@ class OidcClient {
         add_action('wp_ajax_nopriv_openid-connect-authorize', [$this, 'handleCallback']);
         add_action('wp_ajax_openid-connect-authorize', [$this, 'handleCallback']);
 
-        // Entrypoint di login via admin-ajax: genera state/nonce al MOMENTO del click
+        // Entrypoint di login via admin-ajax: genera lo state al MOMENTO del click
         // (non al render della pagina). Così l'URL nei menu è statico e safe-to-cache:
         // WP cache plugins possono cachare la home senza invalidare il CSRF state, e
-        // chiamate multiple allo stesso URL producono ogni volta uno state fresco
-        // sincronizzato con $_SESSION['ri_oidc_state'].
+        // chiamate multiple allo stesso URL producono ogni volta uno state fresco,
+        // ciascuno con il suo cookie.
         add_action('wp_ajax_nopriv_ri_start_login', [$this, 'handleStartLogin']);
         add_action('wp_ajax_ri_start_login', [$this, 'handleStartLogin']);
 
@@ -68,37 +68,32 @@ class OidcClient {
     /**
      * URL di "avvio login" da mettere nei menu/button/shortcode.
      *
-     * NON è più l'URL diretto di Identity con lo state nel query string. Restituisce
-     * un endpoint WP (admin-ajax) che al click genera state/nonce e redirige a Identity.
+     * NON è l'URL diretto di Identity con lo state nel query string. Restituisce
+     * un endpoint WP (admin-ajax) che al click genera lo state e redirige a Identity.
      *
      * Motivo: se mettessimo lo state direttamente in questo URL, il plugin genererebbe
      * lo state al RENDER della pagina. Una pagina cachata da WP/Cloudflare servirebbe
-     * lo stesso URL (quindi lo stesso state) a utenti diversi senza eseguire PHP, ma
-     * $_SESSION['ri_oidc_state'] dipende dalla sessione dell'utente che clicca —
-     * sarebbe vuoto o diverso al callback → "Verifica state CSRF fallita".
+     * lo stesso URL (quindi lo stesso state) a utenti diversi senza eseguire PHP, ma il
+     * cookie che accompagna lo state è del browser che clicca: mancherebbe al callback.
      *
      * Con l'endpoint proxy invece: URL statico (safe-to-cache), PHP gira al click
-     * (mai cachato, è admin-ajax), state in sessione coerente.
+     * (mai cachato, è admin-ajax), state e cookie nascono insieme.
      */
     public function getAuthorizationUrl(): string {
         return admin_url('admin-ajax.php?action=ri_start_login');
     }
 
     /**
-     * Handler dell'endpoint ri_start_login: genera state/nonce nella sessione
-     * dell'utente corrente e redirige a Identity/connect/authorize.
+     * Handler of the ri_start_login endpoint: starts the authorization request and sends the
+     * browser to Identity. No nonce: the id_token is never read, the profile comes from userinfo.
      */
     public function handleStartLogin(): void {
-        $state = ri_generate_state();
-        $nonce = ri_generate_nonce();
-
         $params = [
             'response_type' => 'code',
             'client_id'     => $this->settings->get('client_id'),
             'redirect_uri'  => $this->settings->getCallbackUrl(),
             'scope'         => $this->settings->getScopes(),
-            'state'         => $state,
-            'nonce'         => $nonce,
+            'state'         => ri_start_oidc_request('login'),
         ];
 
         $url = $this->settings->getAuthorizationEndpoint() . '?' . http_build_query($params);
@@ -122,8 +117,8 @@ class OidcClient {
      * - Utente non OIDC → profilo WP standard.
      * - Utente OIDC → redirect a /connect/authorize con prompt=none: Identity NON mostra
      *   alcuna UI, risponde con un code se la sessione è viva o con error=login_required se
-     *   l'utente si è sloggato da Identity. La risposta torna al callback normale, che grazie
-     *   al flag di sessione 'ri_oidc_intent' viene dirottata su handleAccountCheckCallback.
+     *   l'utente si è sloggato da Identity. La risposta torna al callback normale, che
+     *   dall'intento salvato con la richiesta la dirotta su handleAccountCheckCallback.
      */
     public function handleAccountRedirect(): void {
         $user_id = get_current_user_id();
@@ -140,24 +135,15 @@ class OidcClient {
             exit;
         }
 
-        // Memorizza dove tornare (URL locale WP) dopo l'eventuale logout.
-        if (session_status() === PHP_SESSION_NONE && !headers_sent()) {
-            session_start();
-        }
-        $return_to = isset($_GET['return_to']) ? esc_url_raw(wp_unslash($_GET['return_to'])) : home_url('/');
-        $_SESSION['ri_oidc_intent'] = 'account';
-        $_SESSION['ri_oidc_account_return'] = $return_to;
-
-        $state = ri_generate_state();
-        $nonce = ri_generate_nonce();
+        // Where to land after the check (a local WP URL): kept with the request, read at the callback.
+        $return_to = wp_validate_redirect(esc_url_raw(wp_unslash($_GET['return_to'] ?? '')), home_url('/'));
 
         $params = [
             'response_type' => 'code',
             'client_id'     => $this->settings->get('client_id'),
             'redirect_uri'  => $this->settings->getCallbackUrl(),
             'scope'         => $this->settings->getScopes(),
-            'state'         => $state,
-            'nonce'         => $nonce,
+            'state'         => ri_start_oidc_request('account', $return_to),
             'prompt'        => 'none', // verifica silenziosa: nessuna schermata
         ];
 
@@ -180,11 +166,7 @@ class OidcClient {
      * - altri errori → non intrappoliamo: mandiamo al profilo Identity in modo interattivo,
      *   così Identity può gestire eventuali interazioni (es. consenso).
      */
-    private function handleAccountCheckCallback(): void {
-        unset($_SESSION['ri_oidc_intent']);
-        $return_to = $_SESSION['ri_oidc_account_return'] ?? home_url('/');
-        unset($_SESSION['ri_oidc_account_return']);
-
+    private function handleAccountCheckCallback(string $return_to): void {
         $user_id = get_current_user_id();
 
         if (isset($_GET['error'])) {
@@ -214,14 +196,6 @@ class OidcClient {
             exit;
         }
 
-        // Verifica CSRF dello state.
-        $state = sanitize_text_field($_GET['state'] ?? '');
-        if (!ri_verify_state($state)) {
-            Logger::error('account_check_state', 'State CSRF non valido nel check sessione');
-            wp_safe_redirect($return_to);
-            exit;
-        }
-
         // Code presente + sessione viva: non serve scambiarlo (l'utente è già loggato su WP),
         // andiamo al profilo Identity con i parametri returnUrl/logoutUrl standard.
         Logger::debug('account_check_ok', "Sessione Identity valida — redirect al profilo per utente #$user_id");
@@ -233,22 +207,27 @@ class OidcClient {
      * Gestisce il callback dal server Identity dopo l'autenticazione.
      */
     public function handleCallback(): void {
-        if (session_status() === PHP_SESSION_NONE && !headers_sent()) {
-            session_start();
-        }
-
-        // Check silenzioso della sessione (prompt=none) avviato da ri_account: non è un login,
-        // va gestito a parte per non intrappolare l'utente e per non rifare la sync completa.
-        if (($_SESSION['ri_oidc_intent'] ?? '') === 'account') {
-            $this->handleAccountCheckCallback();
-            return;
-        }
-
         Logger::info('callback_received', 'Callback ricevuto dal server Identity', [
             'has_code'  => isset($_GET['code']),
             'has_state' => isset($_GET['state']),
             'has_error' => isset($_GET['error']),
         ]);
+
+        // The request this browser started, taken back with its state. Without it nothing in
+        // the callback is acted on, errors included: no code is exchanged for a request that is
+        // not ours or that already served.
+        $request = ri_consume_oidc_request(sanitize_text_field(wp_unslash($_GET['state'] ?? '')));
+        if ($request === null) {
+            $this->handleCallbackWithoutRequest();
+            return;
+        }
+
+        // Check silenzioso della sessione (prompt=none) avviato da ri_account: non è un login,
+        // va gestito a parte per non intrappolare l'utente e per non rifare la sync completa.
+        if ($request['intent'] === 'account') {
+            $this->handleAccountCheckCallback($request['return_to'] ?? home_url('/'));
+            return;
+        }
 
         // Verifica errori dal server Identity
         if (isset($_GET['error'])) {
@@ -268,23 +247,10 @@ class OidcClient {
         }
 
         $code = sanitize_text_field($_GET['code'] ?? '');
-        $state = sanitize_text_field($_GET['state'] ?? '');
-
-        if (empty($code) || empty($state)) {
-            Logger::error('callback_invalid', 'Parametri mancanti nel callback', [
-                'has_code'  => !empty($code),
-                'has_state' => !empty($state),
-            ]);
+        if ($code === '') {
+            Logger::error('callback_invalid', 'Code mancante nel callback');
             wp_die('Parametri mancanti nella risposta di autenticazione.', 'Errore', ['response' => 400]);
         }
-
-        // Verifica state CSRF
-        if (!ri_verify_state($state)) {
-            Logger::error('state_mismatch', 'Verifica state CSRF fallita — possibile attacco CSRF o sessione scaduta');
-            wp_die('Verifica state CSRF fallita. Prova a effettuare nuovamente il login.', 'Errore di sicurezza', ['response' => 403]);
-        }
-
-        Logger::debug('state_verified', 'State CSRF verificato con successo');
 
         // Scambia il code per i token
         Logger::info('token_exchange_start', 'Inizio scambio authorization code per token', [
@@ -406,6 +372,30 @@ class OidcClient {
 
         wp_safe_redirect($redirect);
         exit;
+    }
+
+    /**
+     * A callback no request of this browser is waiting for: replayed after a login that went
+     * through (back button, refresh), or not started here. The user who is in already goes
+     * where the login leads; the others get the way back to the login, with no automatic
+     * redirect, which with cookies blocked would loop.
+     */
+    private function handleCallbackWithoutRequest(): void {
+        if (is_user_logged_in()) {
+            $user = wp_get_current_user();
+            Logger::info('callback_replayed', "Callback senza richiesta per l'utente #{$user->ID} già autenticato: redirect", [
+                'user_id' => $user->ID,
+            ]);
+            wp_safe_redirect(apply_filters('ri_login_redirect', $this->settings->get('login_redirect', home_url('/')), $user));
+            exit;
+        }
+
+        Logger::error('state_mismatch', 'Callback senza una richiesta avviata da questo browser: state sconosciuto o scaduto');
+        wp_die(
+            'La richiesta di accesso non è partita da questo browser o è scaduta.',
+            'Accesso non completato',
+            ['response' => 403, 'link_url' => $this->getAuthorizationUrl(), 'link_text' => 'Accedi di nuovo']
+        );
     }
 
     /**

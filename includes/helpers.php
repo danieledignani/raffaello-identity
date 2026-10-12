@@ -94,51 +94,48 @@ function ri_save_options(array $options): void {
 }
 
 /**
- * Genera lo state CSRF e lo salva in sessione.
+ * Starts an authorization request and returns its state. A cookie named after the state keeps
+ * what the callback needs to know, one per request: two tabs or a double click do not cancel
+ * each other, and nothing depends on a PHP session. The cookie is host-only and bound to the
+ * path of admin-ajax, where the start and the callback live.
  */
-function ri_generate_state(): string {
-    if (session_status() === PHP_SESSION_NONE) {
-        session_start();
+function ri_start_oidc_request(string $intent, string $return_to = ''): string {
+    $state = bin2hex(random_bytes(20));
+    $request = ['intent' => $intent];
+    if ($return_to !== '') {
+        $request['return_to'] = $return_to;
     }
-    $state = wp_generate_password(40, false);
-    $_SESSION['ri_oidc_state'] = $state;
+
+    setcookie('ri_oidc_' . $state, wp_json_encode($request), ri_oidc_request_cookie_options(time() + 30 * MINUTE_IN_SECONDS));
+
     return $state;
 }
 
 /**
- * Verifica lo state CSRF.
+ * Takes back the request the browser started for the state, and forgets it: null when there is
+ * none, so a callback replayed (back button, refresh) or not started here carries nothing to act on.
  */
-function ri_verify_state(string $state): bool {
-    if (session_status() === PHP_SESSION_NONE) {
-        session_start();
+function ri_consume_oidc_request(string $state): ?array {
+    $name = 'ri_oidc_' . $state;
+    if (!preg_match('/^[0-9a-f]{40}$/', $state) || !isset($_COOKIE[$name])) {
+        return null;
     }
-    $valid = isset($_SESSION['ri_oidc_state']) && hash_equals($_SESSION['ri_oidc_state'], $state);
-    unset($_SESSION['ri_oidc_state']);
-    return $valid;
+
+    $request = json_decode(wp_unslash($_COOKIE[$name]), true);
+    setcookie($name, '', ri_oidc_request_cookie_options(time() - YEAR_IN_SECONDS));
+    unset($_COOKIE[$name]);
+
+    return is_array($request) && isset($request['intent']) ? $request : null;
 }
 
-/**
- * Salva il nonce OIDC in sessione.
- */
-function ri_generate_nonce(): string {
-    if (session_status() === PHP_SESSION_NONE) {
-        session_start();
-    }
-    $nonce = wp_generate_password(40, false);
-    $_SESSION['ri_oidc_nonce'] = $nonce;
-    return $nonce;
-}
-
-/**
- * Verifica il nonce OIDC.
- */
-function ri_verify_nonce(string $nonce): bool {
-    if (session_status() === PHP_SESSION_NONE) {
-        session_start();
-    }
-    $valid = isset($_SESSION['ri_oidc_nonce']) && hash_equals($_SESSION['ri_oidc_nonce'], $nonce);
-    unset($_SESSION['ri_oidc_nonce']);
-    return $valid;
+function ri_oidc_request_cookie_options(int $expires): array {
+    return [
+        'expires'  => $expires,
+        'path'     => parse_url(admin_url('admin-ajax.php'), PHP_URL_PATH),
+        'secure'   => is_ssl(),
+        'httponly' => true,
+        'samesite' => 'Lax',
+    ];
 }
 
 /**

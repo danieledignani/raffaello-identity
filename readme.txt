@@ -4,7 +4,7 @@ Tags: oidc, openid-connect, identity, sso, login
 Requires at least: 5.8
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.8.0
+Stable tag: 1.8.1
 License: GPLv2 or later
 
 Integrazione OIDC con GruppoRaffaello.Identity — login, profilo utente, ruoli e claim configurabili.
@@ -85,6 +85,11 @@ Esempio pagina login:
 * `ri_user_synced` (action) — Chiamato dopo la sincronizzazione dell'utente. Parametri: `$user_id`, `$userinfo`, `$tokens`
 
 == Changelog ==
+
+= 1.8.1 =
+* Fix: "Verifica state CSRF fallita" dopo un login riuscito (Indietro, refresh o doppio invio sul callback) e con due schede di login aperte. Ogni richiesta di autorizzazione ha ora il suo cookie (legato al browser, 30 minuti, solo per admin-ajax) al posto dell'unico state nella sessione PHP; il plugin non apre più sessioni PHP, quindi spariscono PHPSESSID e gli header anti-cache su ogni pagina. Un callback ripetuto dopo l'accesso porta alla pagina post-login; senza accesso mostra il link per riprovare.
+* Gli errori rimandati da Identity contano solo per una richiesta avviata dal browser: un link di terzi non può più sloggare l'utente tramite il check prompt=none.
+* Tolto il nonce, mai verificato. Le funzioni globali ri_generate_state, ri_verify_state, ri_generate_nonce e ri_verify_nonce non esistono più.
 
 = 1.8.0 =
 * Email allineata a Identity a ogni accesso: l'email dell'utente WordPress e quella di fatturazione WooCommerce seguono il profilo Identity, senza la notifica di WordPress al vecchio indirizzo. Se l'indirizzo è ancora usato da un altro account WordPress, l'email dell'account resta com'è (quella di fatturazione si allinea comunque) e il conflitto finisce nel log.
