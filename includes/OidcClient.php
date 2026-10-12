@@ -596,7 +596,15 @@ class OidcClient {
                 }
             }
 
-            $result = wp_update_user($update_data);
+            // Written only when something changed: every write fires profile_update for all its listeners.
+            $changed = array_filter(
+                $update_data,
+                static fn($value, $field) => $field !== 'ID' && (string) $value !== (string) $user->$field,
+                ARRAY_FILTER_USE_BOTH
+            );
+            $result = $changed
+                ? $this->withoutMailchimpUserSync(static fn() => wp_update_user(['ID' => $user->ID] + $changed))
+                : $user->ID;
             remove_filter('send_email_change_email', $no_email_change_mail, PHP_INT_MAX);
             $user_id = $user->ID;
 
@@ -605,7 +613,7 @@ class OidcClient {
                     'user_id' => $user_id,
                     'email'   => $email,
                 ]);
-            } else {
+            } elseif ($changed) {
                 Logger::info('sync_user_updated', "Utente aggiornato", [
                     'user_id' => $user_id,
                     'email'   => $email,
@@ -679,7 +687,7 @@ class OidcClient {
              */
             $user_data = apply_filters('ri_alter_user_data', $user_data, $userinfo);
 
-            $user_id = wp_insert_user($user_data);
+            $user_id = $this->withoutMailchimpUserSync(static fn() => wp_insert_user($user_data));
 
             if (is_wp_error($user_id)) {
                 Logger::error('sync_create_failed', "Creazione utente WP fallita", [
@@ -726,6 +734,36 @@ class OidcClient {
         do_action('ri_user_synced', $user_id, $userinfo, $tokens);
 
         return $user_id;
+    }
+
+    /**
+     * Writes the WordPress user without the user sync of Mailchimp for WooCommerce, which listens to
+     * profile_update and user_register in admin context, admin-ajax included: it would send Mailchimp
+     * its own subscription flag and GDPR fields, older than the consents managed by Identity.
+     */
+    private function withoutMailchimpUserSync(callable $write) {
+        if (!is_callable(['MailChimp_Service', 'instance'])) {
+            return $write();
+        }
+
+        $service = \MailChimp_Service::instance();
+        $detached = [];
+        // Accepted arguments as Mailchimp for WooCommerce registers them.
+        foreach ([['profile_update', 'handleUserUpdated', 2], ['user_register', 'handleUserRegistration', 1]] as [$hook, $method, $args]) {
+            $priority = has_action($hook, [$service, $method]);
+            if ($priority !== false) {
+                remove_action($hook, [$service, $method], $priority);
+                $detached[] = [$hook, $method, $priority, $args];
+            }
+        }
+
+        try {
+            return $write();
+        } finally {
+            foreach ($detached as [$hook, $method, $priority, $args]) {
+                add_action($hook, [$service, $method], $priority, $args);
+            }
+        }
     }
 
     private function getLinkConflictMessage(): string {
