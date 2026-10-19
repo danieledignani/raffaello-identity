@@ -520,7 +520,8 @@ class Frontend {
     // =========================================================================
 
     /**
-     * Redirect della pagina My Account al login Identity se non loggato.
+     * Sends visitors who are not signed in from My Account to the Identity login. The order
+     * withdrawal form (WooCommerce 11.1+, endpoint key 'order-withdrawal') stays public.
      */
     public function redirectWcMyAccount(): void {
         if (is_user_logged_in()) {
@@ -528,6 +529,10 @@ class Frontend {
         }
 
         if (!function_exists('is_account_page')) {
+            return;
+        }
+
+        if (WC()->query->get_current_endpoint() === 'order-withdrawal') {
             return;
         }
 
